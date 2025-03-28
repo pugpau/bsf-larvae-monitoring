@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+influxdb-client
+paho-mqtt
+python-dotenv
+pandas
+numpy
+scikit-learn
+requests 
+# Prometheus client for monitoring (optional, add later if needed)
+# prometheus-fastapi-instrumentator
