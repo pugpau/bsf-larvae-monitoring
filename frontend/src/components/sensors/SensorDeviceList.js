@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { getLatestSensorData, getAllSensorData } from '../../api/sensors';
 import './SensorDeviceList.css';
 
 /**
@@ -18,14 +18,11 @@ const SensorDeviceList = ({ farmId }) => {
     setError(null);
     
     try {
-      const url = farmId 
-        ? `/api/sensors/latest/${farmId}`
-        : '/api/sensors/data';
-      
-      const response = await axios.get(url);
+      let data;
       
       if (farmId) {
-        const deviceArray = Object.entries(response.data).map(([deviceId, data]) => ({
+        data = await getLatestSensorData(farmId);
+        const deviceArray = Object.entries(data).map(([deviceId, data]) => ({
           deviceId,
           deviceType: data.device_type,
           lastUpdated: new Date(data.last_updated),
@@ -33,7 +30,8 @@ const SensorDeviceList = ({ farmId }) => {
         }));
         setDevices(deviceArray);
       } else {
-        setDevices(response.data);
+        data = await getAllSensorData();
+        setDevices(data);
       }
     } catch (err) {
       console.error("Error fetching sensor data:", err);
