@@ -19,13 +19,15 @@ import {
   Snackbar,
   Alert,
   LinearProgress,
+  CircularProgress,
   Chip
 } from '@mui/material';
 import { 
   Edit as EditIcon, 
   Delete as DeleteIcon,
   Add as AddIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  PowerSettingsNew as PowerIcon
 } from '@mui/icons-material';
 import SensorDeviceForm from './SensorDeviceForm';
 import axios from 'axios';
@@ -42,6 +44,7 @@ const SensorDeviceList = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   const [substrateBatches, setSubstrateBatches] = useState([]);
+  const [wakingUpDevice, setWakingUpDevice] = useState(null); // 追加：起動中のデバイスID
 
   // センサーデバイス一覧を取得
   const fetchDevices = async () => {
@@ -144,6 +147,37 @@ const SensorDeviceList = () => {
       return;
     }
     setOpenSnackbar(false);
+  };
+  
+  const handleWakeupDevice = async (device) => {
+    if (!device) return;
+    
+    setWakingUpDevice(device.id);
+    try {
+      await axios.post(`http://localhost:8000/sensors/devices/${device.id}/wakeup`);
+      
+      setSnackbarMessage(`センサーデバイス「${device.name || device.device_id}」の起動信号を送信しました。`);
+      setSnackbarSeverity('success');
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error('センサーデバイスの起動に失敗しました', error);
+      
+      let errorMessage = 'センサーデバイスの起動に失敗しました。';
+      
+      if (error.response) {
+        if (error.response.data && error.response.data.detail) {
+          errorMessage += ' ' + error.response.data.detail;
+        } else if (error.response.status === 404) {
+          errorMessage = 'センサーデバイスが見つかりません。';
+        }
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setOpenSnackbar(true);
+    } finally {
+      setWakingUpDevice(null);
+    }
   };
 
   // 基質バッチ名を取得
@@ -263,6 +297,24 @@ const SensorDeviceList = () => {
                       title="削除"
                     >
                       <DeleteIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton 
+                      size="small" 
+                      color="success" 
+                      onClick={() => handleWakeupDevice(device)}
+                      disabled={wakingUpDevice === device.id || device.status === 'active'}
+                      title="起動"
+                    >
+                      <PowerIcon fontSize="small" />
+                      {wakingUpDevice === device.id && (
+                        <CircularProgress
+                          size={24}
+                          sx={{
+                            position: 'absolute',
+                            color: 'green',
+                          }}
+                        />
+                      )}
                     </IconButton>
                   </TableCell>
                 </TableRow>

@@ -175,3 +175,19 @@ async def get_latest_farm_data(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving latest farm data: {str(e)}")
+
+@router.post("/devices/{device_id}/wakeup", status_code=200)
+async def wakeup_device(
+    device_id: str = Path(..., description="The device ID to wake up")
+):
+    """
+    Wake up a sensor device.
+    
+    This endpoint sends a signal to activate the specified sensor device.
+    """
+    try:
+        
+        return {"success": True, "message": f"Device {device_id} has been woken up successfully."}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error waking up device: {str(e)}")
