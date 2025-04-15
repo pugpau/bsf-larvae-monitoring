@@ -22,7 +22,9 @@ import {
   Divider,
   Chip,
   Tabs,
-  Tab
+  Tab,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import { 
   Search as SearchIcon, 
@@ -30,11 +32,13 @@ import {
   BarChart as ChartIcon,
   TableChart as TableIcon,
   Timeline as TimelineIcon,
-  ViewInAr as View3DIcon
+  ViewInAr as View3DIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import SensorCharts from './SensorCharts';
 import SensorProphetAnalysis from './SensorProphetAnalysis';
 import Sensor3DVisualization from './Sensor3DVisualization';
+import SensorReadingDetail from './SensorReadingDetail';
 import axios from 'axios';
 
 const SensorReadingsList = () => {
@@ -54,6 +58,8 @@ const SensorReadingsList = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [viewMode, setViewMode] = useState('table'); // 'table', 'chart', 'prophet', or '3d'
+  const [selectedReading, setSelectedReading] = useState(null);
+  const [openDetailDialog, setOpenDetailDialog] = useState(false);
   
   // バリデーション状態
   const [errors, setErrors] = useState({
@@ -203,6 +209,17 @@ const SensorReadingsList = () => {
     } catch (error) {
       return timestamp;
     }
+  };
+  
+  // Handle opening the detail dialog
+  const handleOpenDetail = (reading) => {
+    setSelectedReading(reading);
+    setOpenDetailDialog(true);
+  };
+  
+  // Handle closing the detail dialog
+  const handleCloseDetail = () => {
+    setOpenDetailDialog(false);
   };
 
   return (
@@ -474,11 +491,12 @@ const SensorReadingsList = () => {
                   <TableCell>値</TableCell>
                   <TableCell>単位</TableCell>
                   <TableCell>場所</TableCell>
+                  <TableCell align="center">操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {readings.map((reading) => (
-                  <TableRow key={reading.id}>
+                  <TableRow key={reading.id} hover>
                     <TableCell>{formatTimestamp(reading.timestamp)}</TableCell>
                     <TableCell>{reading.farm_id}</TableCell>
                     <TableCell>{reading.device_id}</TableCell>
@@ -487,6 +505,17 @@ const SensorReadingsList = () => {
                     <TableCell>{reading.value}</TableCell>
                     <TableCell>{reading.unit}</TableCell>
                     <TableCell>{reading.location || '-'}</TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="詳細を表示">
+                        <IconButton 
+                          size="small" 
+                          color="primary" 
+                          onClick={() => handleOpenDetail(reading)}
+                        >
+                          <VisibilityIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -522,6 +551,13 @@ const SensorReadingsList = () => {
           {snackbarMessage}
         </Alert>
       </Snackbar>
+
+      {/* Detail Dialog */}
+      <SensorReadingDetail 
+        open={openDetailDialog}
+        onClose={handleCloseDetail}
+        reading={selectedReading}
+      />
     </Box>
   );
 };
