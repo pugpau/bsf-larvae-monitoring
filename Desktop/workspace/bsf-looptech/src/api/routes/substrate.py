@@ -4,8 +4,8 @@ API routes for substrate management.
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from typing import List, Optional
-from src.substrate.models import SubstrateType, SubstrateBatch, SubstrateAttribute, SubstrateTypeEnum
-from src.substrate.service import SubstrateService
+from substrate.models import SubstrateType, SubstrateBatch, SubstrateAttribute, SubstrateTypeEnum
+from substrate.service import SubstrateService
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/substrate", tags=["substrate"])

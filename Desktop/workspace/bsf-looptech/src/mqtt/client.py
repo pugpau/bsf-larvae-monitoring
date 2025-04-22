@@ -4,10 +4,10 @@ import ssl
 import os
 import re
 from datetime import datetime
-from src.config import settings
+from config import settings
 import json
 # Import InfluxDB client for data writing
-from src.database import write_sensor_data
+from database import write_sensor_data
 
 logging.basicConfig(level=settings.LOG_LEVEL.upper(), format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

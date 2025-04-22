@@ -5,9 +5,9 @@ Service for substrate management operations.
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from src.substrate.models import SubstrateType, SubstrateBatch, SubstrateChangeLog, SubstrateTypeEnum
-from src.substrate.repository import SubstrateRepository
-from src.config import settings
+from substrate.models import SubstrateType, SubstrateBatch, SubstrateChangeLog, SubstrateTypeEnum
+from substrate.repository import SubstrateRepository
+from config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional, Union
 from influxdb_client import InfluxDBClient as InfluxClient
 from influxdb_client.client.write_api import SYNCHRONOUS
 from influxdb_client.client.exceptions import InfluxDBError
-from src.config import settings
+from config import settings
 
 # Configure logging
 logging.basicConfig(level=settings.LOG_LEVEL.upper(), format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

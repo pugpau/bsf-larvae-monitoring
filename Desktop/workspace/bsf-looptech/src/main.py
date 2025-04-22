@@ -3,10 +3,10 @@ import uvicorn
 import os
 import logging
 from dotenv import load_dotenv
-from src.config import settings
-from src.api.routes import substrate, sensors
-from src.mqtt.client import connect_mqtt
-from src.database.influxdb import InfluxDBClient
+from config import settings
+from api.routes import substrate, sensors
+from mqtt.client import connect_mqtt
+from database.influxdb import InfluxDBClient
 
 # Load environment variables from .env file
 load_dotenv()
