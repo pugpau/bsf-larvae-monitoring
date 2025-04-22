@@ -3,6 +3,7 @@ import uvicorn
 import os
 import logging
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from api.routes import substrate, sensors
 from mqtt.client import connect_mqtt
@@ -19,6 +20,14 @@ app = FastAPI(
     title="BSF Larvae Monitoring System API",
     description="API for monitoring and managing BSF larvae cultivation environments.",
     version="0.1.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Include routers
