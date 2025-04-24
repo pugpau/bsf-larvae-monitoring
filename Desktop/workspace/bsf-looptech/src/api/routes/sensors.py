@@ -147,6 +147,7 @@ def get_sensor_device_service():
     return SensorDeviceService()
 
 @router.get("/data", response_model=List[SensorDataResponse])
+@router.get("/readings", response_model=List[SensorDataResponse])
 async def get_sensor_data(
     farm_id: Optional[str] = Query(None, description="Filter by farm ID"),
     device_id: Optional[str] = Query(None, description="Filter by device ID"),

@@ -26,10 +26,26 @@ const SensorReadingDetail = ({ open, onClose, reading }) => {
 
   const formatTimestamp = (timestamp) => {
     try {
-      const date = new Date(timestamp);
-      return date.toLocaleString();
-    } catch (error) {
+      if (timestamp instanceof Date) {
+        return timestamp.toLocaleString();
+      }
+      
+      if (typeof timestamp === 'string' && timestamp.includes('T')) {
+        const date = new Date(timestamp);
+        return date.toLocaleString();
+      }
+      
+      if (typeof timestamp === 'number') {
+        const date = timestamp > 9999999999 
+          ? new Date(timestamp) // milliseconds
+          : new Date(timestamp * 1000); // seconds
+        return date.toLocaleString();
+      }
+      
       return timestamp;
+    } catch (error) {
+      console.error('Error formatting timestamp:', error, timestamp);
+      return 'Invalid Date';
     }
   };
 
@@ -44,7 +60,7 @@ const SensorReadingDetail = ({ open, onClose, reading }) => {
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">センサーデータ詳細</Typography>
           <Chip 
-            label={`ID: ${reading.id}`} 
+            label={`ID: ${reading.id || 'N/A'}`} 
             color="primary" 
             variant="outlined" 
             size="small" 
@@ -64,7 +80,7 @@ const SensorReadingDetail = ({ open, onClose, reading }) => {
                   タイムスタンプ:
                 </Typography>
                 <Typography variant="body1" component="span">
-                  {formatTimestamp(reading.timestamp)}
+                  {formatTimestamp(reading.time) || formatTimestamp(reading.timestamp) || 'Invalid Date'}
                 </Typography>
               </Box>
             </Grid>
@@ -116,7 +132,7 @@ const SensorReadingDetail = ({ open, onClose, reading }) => {
                   測定タイプ:
                 </Typography>
                 <Typography variant="body1" component="span">
-                  {reading.measurement_type}
+                  {reading.field || '-'}
                 </Typography>
               </Box>
             </Grid>

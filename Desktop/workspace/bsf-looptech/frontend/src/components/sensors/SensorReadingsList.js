@@ -204,10 +204,27 @@ const SensorReadingsList = () => {
   // Format timestamp for display
   const formatTimestamp = (timestamp) => {
     try {
-      const date = new Date(timestamp);
-      return date.toLocaleString();
-    } catch (error) {
+      if (timestamp instanceof Date) {
+        return timestamp.toLocaleString();
+      }
+      
+      // Handle ISO string format
+      if (typeof timestamp === 'string' && timestamp.includes('T')) {
+        const date = new Date(timestamp);
+        return date.toLocaleString();
+      }
+      
+      if (typeof timestamp === 'number') {
+        const date = timestamp > 9999999999 
+          ? new Date(timestamp) // milliseconds
+          : new Date(timestamp * 1000); // seconds
+        return date.toLocaleString();
+      }
+      
       return timestamp;
+    } catch (error) {
+      console.error('Error formatting timestamp:', error, timestamp);
+      return 'Invalid Date';
     }
   };
   
@@ -496,14 +513,14 @@ const SensorReadingsList = () => {
               </TableHead>
               <TableBody>
                 {readings.map((reading) => (
-                  <TableRow key={reading.id} hover>
-                    <TableCell>{formatTimestamp(reading.timestamp)}</TableCell>
+                  <TableRow key={reading.id || `${reading.device_id}-${reading.field}`} hover>
+                    <TableCell>{formatTimestamp(reading.time) || formatTimestamp(reading.timestamp) || 'Invalid Date'}</TableCell>
                     <TableCell>{reading.farm_id}</TableCell>
                     <TableCell>{reading.device_id}</TableCell>
                     <TableCell>{reading.device_type}</TableCell>
-                    <TableCell>{reading.measurement_type}</TableCell>
+                    <TableCell>{reading.field || reading.measurement_type || '-'}</TableCell>
                     <TableCell>{reading.value}</TableCell>
-                    <TableCell>{reading.unit}</TableCell>
+                    <TableCell>{reading.unit || '-'}</TableCell>
                     <TableCell>{reading.location || '-'}</TableCell>
                     <TableCell align="center">
                       <Tooltip title="詳細を表示">
