@@ -172,7 +172,27 @@ def query_sensor_data(
             
             # Build Flux query
             query = f'from(bucket: "{client.bucket}")'
-            query += f' |> range(start: {start_time if start_time else "-1d"}, stop: {end_time if end_time else "now()"})'
+            
+            # Prepare start_time parameter
+            if start_time:
+                if isinstance(start_time, datetime):
+                    start_time_str = f'time(v: "{start_time.strftime("%Y-%m-%dT%H:%M:%SZ")}")'
+                else:
+                    start_time_str = f'time(v: "{start_time}")'
+            else:
+                start_time_str = "-1d"
+            
+            # Prepare end_time parameter
+            if end_time:
+                if isinstance(end_time, datetime):
+                    end_time_str = f'time(v: "{end_time.strftime("%Y-%m-%dT%H:%M:%SZ")}")'
+                else:
+                    end_time_str = f'time(v: "{end_time}")'
+            else:
+                end_time_str = "now()"
+            
+            query += f' |> range(start: {start_time_str}, stop: {end_time_str})'
+            
             query += ' |> filter(fn: (r) => r._measurement == "sensor_data")'
             
             # Add optional filters
