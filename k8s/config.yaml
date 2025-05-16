@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bsf-config
+data:
+  influxdb-url: "http://bsf-influxdb:8086"
+  influxdb-org: "bsf-organization"
+  influxdb-bucket: "bsf_data"
+  mqtt-host: "bsf-mqtt"
+  mqtt-port: "1883"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bsf-secrets
+type: Opaque
+stringData:
+  influxdb-token: "your-influxdb-token"  # Replace with actual token
+  mqtt-username: "mqtt-user"             # Replace with actual username
+  mqtt-password: "mqtt-password"         # Replace with actual password

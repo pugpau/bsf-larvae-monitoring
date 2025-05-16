@@ -2,6 +2,13 @@
 
 A comprehensive IoT monitoring and optimization system for BSF (Black Soldier Fly) larvae cultivation environments.
 
+## Documentation
+
+- [API Documentation](./docs/api/README.md)
+- [Setup Guide](./docs/setup/README.md)
+- [Design Documentation](./docs/design/README.md)
+- [Deployment Guide](./docs/deployment/README.md)
+
 ## Features
 
 - Environment sensor data collection
@@ -30,9 +37,36 @@ bsf-larvae-monitoring/
 │   ├── requirements.txt # Backend dependencies
 ```
 
-## Setup Instructions
+## Quick Start
 
-### Frontend Setup
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Development Setup
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/pugpau/bsf-larvae-monitoring.git
+   cd bsf-larvae-monitoring
+   ```
+
+2. Start the development environment:
+
+   ```bash
+   docker-compose up -d
+   ```
+
+3. Access the application:
+
+   - Frontend: http://localhost
+   - Backend API: http://localhost:8000
+
+### Manual Setup
+
+#### Frontend Setup
 
 ```bash
 cd frontend
@@ -40,7 +74,7 @@ npm install
 npm start
 ```
 
-### Backend Setup
+#### Backend Setup
 
 ```bash
 cd backend
@@ -82,3 +116,7 @@ Create a `.env` file in the backend directory:
 PORT=8000
 LOG_LEVEL=info
 ```
+
+## Deployment
+
+For detailed deployment instructions, see the [Deployment Guide](./docs/deployment/README.md).

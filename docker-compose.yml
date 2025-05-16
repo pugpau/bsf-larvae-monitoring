@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # Backend service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - LOG_LEVEL=info
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-default_token}
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-default_org}
+      - INFLUXDB_BUCKET=bsf_data
+      - MQTT_BROKER_HOST=mqtt
+      - MQTT_BROKER_PORT=1883
+    depends_on:
+      - influxdb
+      - mqtt
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # InfluxDB service
+  influxdb:
+    image: influxdb:2.7
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD:-password}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG:-default_org}
+      - DOCKER_INFLUXDB_INIT_BUCKET=bsf_data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:-default_token}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # MQTT broker service
+  mqtt:
+    image: emqx/emqx:5.0
+    ports:
+      - "1883:1883"
+      - "8883:8883"
+      - "18083:18083"
+    environment:
+      - EMQX_NAME=emqx
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${MQTT_ADMIN_PASSWORD:-public}
+    volumes:
+      - mqtt-data:/opt/emqx/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "emqx_ctl", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  influxdb-data:
+  mqtt-data:

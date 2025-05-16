@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bsf-frontend
+  labels:
+    app: bsf-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bsf-frontend
+  template:
+    metadata:
+      labels:
+        app: bsf-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: ghcr.io/pugpau/bsf-larvae-monitoring/frontend:latest
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bsf-frontend
+spec:
+  selector:
+    app: bsf-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
