@@ -1,0 +1,109 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  background-color: #282c34;
+  padding: 1rem;
+  color: white;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.app-header nav ul {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0 0;
+}
+
+.app-header nav li {
+  margin-right: 1rem;
+}
+
+.app-header nav a {
+  color: white;
+  text-decoration: none;
+}
+
+.app-header nav a:hover {
+  text-decoration: underline;
+}
+
+.app-content {
+  flex: 1;
+  padding: 1rem;
+}
+
+.app-footer {
+  background-color: #f5f5f5;
+  padding: 1rem;
+  text-align: center;
+}
+
+/* Dashboard styles */
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.dashboard-card {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: white;
+}
+
+.dashboard-card h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+}
+
+/* Sensor styles */
+.sensor-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.sensor-card {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: white;
+}
+
+.sensor-detail {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.sensor-chart {
+  margin-top: 1rem;
+  height: 300px;
+}
+
+/* Substrate styles */
+.substrate-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.substrate-card {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: white;
+}
+
+.substrate-detail {
+  max-width: 800px;
+  margin: 0 auto;
+}
