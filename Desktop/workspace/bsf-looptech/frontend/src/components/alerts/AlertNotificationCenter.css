@@ -1,0 +1,302 @@
+/* Alert Notification Center Styles */
+
+.alert-fab {
+  transition: all 0.3s ease;
+}
+
+.alert-fab:hover {
+  transform: scale(1.1);
+}
+
+.alert-fab.bottom-right {
+  bottom: 20px;
+  right: 20px;
+}
+
+.alert-fab.bottom-left {
+  bottom: 20px;
+  left: 20px;
+}
+
+.alert-fab.top-right {
+  top: 20px;
+  right: 20px;
+}
+
+.alert-fab.top-left {
+  top: 20px;
+  left: 20px;
+}
+
+.alert-item {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.alert-item:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.alert-item.unread {
+  background-color: rgba(25, 118, 210, 0.08) !important;
+  border-left: 4px solid #1976d2 !important;
+}
+
+.alert-item.unread .MuiListItemText-primary {
+  font-weight: 600;
+}
+
+/* Animation for new alerts */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.alert-item:first-child {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Critical alert pulsing effect */
+@keyframes criticalPulse {
+  0% {
+    border-left-color: #d32f2f;
+    background-color: rgba(211, 47, 47, 0.1);
+  }
+  50% {
+    border-left-color: #f44336;
+    background-color: rgba(244, 67, 54, 0.2);
+  }
+  100% {
+    border-left-color: #d32f2f;
+    background-color: rgba(211, 47, 47, 0.1);
+  }
+}
+
+.alert-item[data-severity="critical"] {
+  animation: criticalPulse 2s infinite;
+}
+
+/* Severity color indicators */
+.alert-item[data-severity="info"] {
+  border-left-color: #2196f3 !important;
+}
+
+.alert-item[data-severity="warning"] {
+  border-left-color: #ff9800 !important;
+}
+
+.alert-item[data-severity="error"] {
+  border-left-color: #f44336 !important;
+}
+
+.alert-item[data-severity="critical"] {
+  border-left-color: #d32f2f !important;
+}
+
+/* Custom scrollbar for alert list */
+.MuiList-root::-webkit-scrollbar {
+  width: 8px;
+}
+
+.MuiList-root::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.MuiList-root::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.MuiList-root::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Badge animation */
+@keyframes badgePulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.MuiBadge-badge {
+  animation: badgePulse 2s infinite;
+}
+
+/* Settings dialog enhancements */
+.MuiSlider-mark {
+  background-color: currentColor;
+  width: 2px;
+  height: 2px;
+}
+
+.MuiSlider-markActive {
+  background-color: currentColor;
+}
+
+/* Snackbar positioning */
+.MuiSnackbar-root {
+  z-index: 1400;
+}
+
+/* Alert transition effects */
+.alert-enter {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.alert-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.alert-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.alert-exit-active {
+  opacity: 0;
+  transform: translateX(100%);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* Sound indicator */
+.sound-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4caf50;
+  font-size: 12px;
+}
+
+.sound-indicator.disabled {
+  color: #9e9e9e;
+}
+
+/* Connection status indicator */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 4px;
+}
+
+.connection-status.connected {
+  background-color: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+
+.connection-status.disconnected {
+  background-color: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+}
+
+/* Alert type chips */
+.alert-severity-chip {
+  font-size: 0.7rem;
+  height: 20px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.alert-severity-chip.info {
+  background-color: #2196f3;
+  color: white;
+}
+
+.alert-severity-chip.warning {
+  background-color: #ff9800;
+  color: white;
+}
+
+.alert-severity-chip.error {
+  background-color: #f44336;
+  color: white;
+}
+
+.alert-severity-chip.critical {
+  background-color: #d32f2f;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+/* Loading states */
+.alert-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  color: #666;
+}
+
+.alert-loading .MuiCircularProgress-root {
+  margin-right: 16px;
+}
+
+/* Empty state */
+.alert-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+}
+
+.alert-empty .MuiSvgIcon-root {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+/* Responsive design */
+@media (max-width: 600px) {
+  .alert-fab {
+    bottom: 16px !important;
+    right: 16px !important;
+    left: auto !important;
+    top: auto !important;
+  }
+  
+  .MuiDrawer-paper {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .alert-item:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+  }
+  
+  .alert-item.unread {
+    background-color: rgba(144, 202, 249, 0.16) !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .alert-item {
+    border: 1px solid;
+  }
+  
+  .alert-severity-chip {
+    border: 2px solid currentColor;
+  }
+}

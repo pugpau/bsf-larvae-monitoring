@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bsf-looptech"
+version = "0.1.0"
+description = "BSF (Black Soldier Fly) Loop Technology Management System"
+requires-python = ">=3.8"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "influxdb-client",
+    "paho-mqtt",
+    "python-dotenv",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "requests",
+    "sqlalchemy>=1.4.0",
+    "asyncpg",
+    "alembic",
+    "psycopg2-binary",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pylint.messages_control]
+disable = ["C0114", "C0115", "C0116"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
