@@ -6,6 +6,7 @@ Provides endpoints for managing rules and viewing anomalies.
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+import numpy as np
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -915,6 +916,282 @@ async def get_aggregation_windows(
         {"value": window.value, "label": window.value}
         for window in AggregationWindow
     ]
+
+
+# Machine Learning Endpoints
+
+@router.post("/ml/train-pipeline")
+async def start_training_pipeline(
+    measurement_types: List[str],
+    training_period_days: int = 30,
+    test_split_ratio: float = 0.2,
+    include_anomaly_detection: bool = True,
+    farm_id: Optional[str] = None,
+    device_id: Optional[str] = None,
+    current_user: User = Depends(require_permission(Permission.MANAGE_ANALYTICS))
+):
+    """Start ML training pipeline."""
+    from src.analytics.training_pipeline import training_pipeline, TrainingConfig
+    from src.analytics.feature_engineering import FeatureType, WindowConfig, ScalingMethod
+    from src.analytics.ml_models import ModelType
+    
+    try:
+        config = TrainingConfig(
+            measurement_types=measurement_types,
+            training_period_days=training_period_days,
+            test_split_ratio=test_split_ratio,
+            feature_types=[FeatureType.STATISTICAL, FeatureType.TEMPORAL, FeatureType.SPECTRAL],
+            window_config=WindowConfig(window_size=24, step_size=1),
+            scaling_method=ScalingMethod.STANDARD,
+            model_types=[ModelType.RANDOM_FOREST_REGRESSOR, ModelType.LINEAR_REGRESSION],
+            hyperparameter_tuning=True,
+            cross_validation_folds=5,
+            farm_id=farm_id,
+            device_id=device_id,
+            include_anomaly_detection=include_anomaly_detection,
+            contamination_rate=0.1
+        )
+        
+        # バックグラウンドでパイプライン実行
+        import asyncio
+        task = asyncio.create_task(training_pipeline.run_training_pipeline(config))
+        
+        return {
+            "message": "Training pipeline started",
+            "pipeline_id": config.measurement_types[0] if config.measurement_types else "unknown",
+            "config": config.model_dump()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start training pipeline: {str(e)}")
+
+
+@router.get("/ml/pipeline-status/{pipeline_id}")
+async def get_pipeline_status(
+    pipeline_id: str,
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """Get training pipeline status."""
+    from src.analytics.training_pipeline import training_pipeline
+    
+    try:
+        result = await training_pipeline.get_pipeline_status(pipeline_id)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Pipeline not found")
+        
+        return result.model_dump()
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get pipeline status: {str(e)}")
+
+
+@router.get("/ml/pipelines")
+async def list_training_pipelines(
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """List all training pipelines."""
+    from src.analytics.training_pipeline import training_pipeline
+    
+    try:
+        pipelines = await training_pipeline.list_pipelines()
+        return [pipeline.model_dump() for pipeline in pipelines]
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list pipelines: {str(e)}")
+
+
+@router.post("/ml/predict")
+async def predict_values(
+    measurement_types: List[str],
+    prediction_periods: int = 24,
+    prediction_horizon: str = "short_term",
+    farm_id: Optional[str] = None,
+    device_id: Optional[str] = None,
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """Generate predictions using ML models."""
+    from src.analytics.prediction_service import prediction_service, PredictionRequest, PredictionHorizon
+    from src.analytics.ml_models import ModelType
+    
+    try:
+        # 予測リクエストを作成
+        request = PredictionRequest(
+            measurement_types=measurement_types,
+            prediction_horizon=PredictionHorizon(prediction_horizon),
+            prediction_periods=prediction_periods,
+            farm_id=farm_id,
+            device_id=device_id,
+            model_preferences=[ModelType.RANDOM_FOREST_REGRESSOR, ModelType.LINEAR_REGRESSION],
+            confidence_level=0.95
+        )
+        
+        # 予測実行
+        predictions = await prediction_service.predict_multiple_measurements(request)
+        
+        return {
+            "predictions": [pred.model_dump() for pred in predictions],
+            "request_info": {
+                "measurement_types": measurement_types,
+                "prediction_periods": prediction_periods,
+                "prediction_horizon": prediction_horizon,
+                "farm_id": farm_id,
+                "device_id": device_id
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+
+@router.post("/ml/detect-anomalies")
+async def detect_anomalies_realtime(
+    measurement_types: List[str],
+    time_window_minutes: int = 60,
+    farm_id: Optional[str] = None,
+    device_id: Optional[str] = None,
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """Real-time anomaly detection using ML models."""
+    from src.analytics.prediction_service import prediction_service
+    
+    try:
+        result = await prediction_service.detect_anomalies_realtime(
+            measurement_types=measurement_types,
+            time_window_minutes=time_window_minutes,
+            farm_id=farm_id,
+            device_id=device_id
+        )
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Anomaly detection failed: {str(e)}")
+
+
+@router.get("/ml/models")
+async def list_ml_models(
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """List all trained ML models."""
+    from src.analytics.ml_models import ml_model_service
+    
+    try:
+        models = await ml_model_service.list_models()
+        return [model.model_dump() for model in models]
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list models: {str(e)}")
+
+
+@router.get("/ml/models/{model_id}")
+async def get_ml_model(
+    model_id: str,
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """Get specific ML model information."""
+    from src.analytics.ml_models import ml_model_service
+    
+    try:
+        model = await ml_model_service.get_model_info(model_id)
+        
+        if not model:
+            raise HTTPException(status_code=404, detail="Model not found")
+        
+        return model.model_dump()
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get model: {str(e)}")
+
+
+@router.delete("/ml/models/{model_id}")
+async def delete_ml_model(
+    model_id: str,
+    current_user: User = Depends(require_permission(Permission.MANAGE_ANALYTICS))
+):
+    """Delete ML model."""
+    from src.analytics.ml_models import ml_model_service
+    
+    try:
+        success = await ml_model_service.delete_model(model_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Model not found")
+        
+        return {"message": f"Model {model_id} deleted successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete model: {str(e)}")
+
+
+@router.get("/ml/performance")
+async def get_model_performance(
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """Get ML models performance summary."""
+    from src.analytics.prediction_service import prediction_service
+    
+    try:
+        summary = await prediction_service.get_model_performance_summary()
+        return summary
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get performance summary: {str(e)}")
+
+
+@router.post("/ml/feature-extraction")
+async def extract_features(
+    measurement_types: List[str],
+    start_time: datetime,
+    end_time: datetime,
+    feature_types: List[str] = ["statistical", "temporal"],
+    window_size: int = 24,
+    step_size: int = 1,
+    scaling_method: str = "standard",
+    farm_id: Optional[str] = None,
+    device_id: Optional[str] = None,
+    current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS))
+):
+    """Extract features from sensor data."""
+    from src.analytics.feature_engineering import (
+        feature_engineering_service, FeatureType, WindowConfig, ScalingMethod
+    )
+    
+    try:
+        # Enum変換
+        feature_type_enums = [FeatureType(ft) for ft in feature_types]
+        scaling_enum = ScalingMethod(scaling_method)
+        
+        # 特徴量抽出
+        feature_set = await feature_engineering_service.extract_features(
+            measurement_types=measurement_types,
+            start_time=start_time,
+            end_time=end_time,
+            feature_types=feature_type_enums,
+            window_config=WindowConfig(window_size=window_size, step_size=step_size),
+            farm_id=farm_id,
+            device_id=device_id,
+            scaling_method=scaling_enum
+        )
+        
+        return {
+            "feature_names": feature_set.feature_names,
+            "feature_count": len(feature_set.feature_names),
+            "sample_count": len(feature_set.feature_values),
+            "timestamps_count": len(feature_set.timestamps),
+            "metadata": feature_set.metadata,
+            "scaling_info": feature_set.scaling_info,
+            # 実際の特徴量データは大きすぎるため、統計情報のみ返す
+            "feature_statistics": {
+                "mean": np.mean(feature_set.feature_values, axis=0).tolist() if feature_set.feature_values else [],
+                "std": np.std(feature_set.feature_values, axis=0).tolist() if feature_set.feature_values else []
+            }
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid parameter: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Feature extraction failed: {str(e)}")
 
 
 @router.get("/config/trend-types")
