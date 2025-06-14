@@ -322,7 +322,7 @@ class FeatureEngineeringService:
                         np.std(diff_values),
                         zero_crossings,
                         slope,
-                        r_value ** 2,  # 決定係数
+                        float(r_value) ** 2,  # 決定係数
                         ma_deviation,
                         np.mean(np.abs(diff_values)),  # 平均絶対差分
                         len(find_peaks(window_values)[0]),  # ピーク数
