@@ -10,7 +10,7 @@ from enum import Enum
 import pandas as pd
 import numpy as np
 from scipy import stats
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, find_peaks
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from pydantic import BaseModel, Field
 

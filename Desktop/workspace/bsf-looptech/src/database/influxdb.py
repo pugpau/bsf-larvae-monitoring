@@ -6,7 +6,7 @@ This module handles connections and operations with InfluxDB.
 import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
-from influxdb_client import InfluxDBClient as InfluxClient
+from influxdb_client.client.influxdb_client import InfluxDBClient as InfluxClient
 from influxdb_client.client.write_api import SYNCHRONOUS
 from influxdb_client.client.exceptions import InfluxDBError
 from src.config import settings
@@ -264,3 +264,12 @@ def query_sensor_data(
 
 # Singleton instance for global use
 influxdb_client = InfluxDBClient()
+
+def get_influxdb_client() -> InfluxDBClient:
+    """
+    Get the global InfluxDB client instance.
+    
+    Returns:
+        InfluxDBClient: The global InfluxDB client instance
+    """
+    return influxdb_client
