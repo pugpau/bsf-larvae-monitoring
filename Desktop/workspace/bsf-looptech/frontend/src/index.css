@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Global styles */
 body {
   margin: 0;
@@ -6,6 +10,25 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Prevent text truncation on wider screens */
+* {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Typography adjustments for 16:10 screens */
+@media (min-aspect-ratio: 16/10) {
+  body {
+    font-size: 16px;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: 0.02em;
+  }
 }
 
 code {
@@ -78,4 +101,112 @@ code {
 
 .access-denied button:hover {
   background-color: #3c5aa6;
+}
+
+/* Additional animations for v0 components */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Container width adjustments for wider screens */
+@media (min-aspect-ratio: 16/10) and (min-width: 1400px) {
+  .MuiContainer-root {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  
+  .MuiContainer-maxWidthMd {
+    max-width: 100% !important;
+  }
+  
+  .MuiContainer-maxWidthLg {
+    max-width: 1400px;
+  }
+  
+  .MuiContainer-maxWidthXl {
+    max-width: 1920px;
+  }
+}
+
+/* Prevent overflow issues */
+.MuiBox-root,
+.MuiCard-root,
+.MuiCardContent-root {
+  overflow: visible;
+}
+
+/* Table responsiveness for wider screens */
+@media (min-aspect-ratio: 16/10) {
+  .MuiTableContainer-root {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .MuiTable-root {
+    min-width: 100%;
+  }
+  
+  .MuiTableCell-root {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+  }
+  
+  .MuiTableCell-root:hover {
+    white-space: normal;
+    overflow: visible;
+  }
+}
+
+/* Grid spacing adjustments */
+@media (min-aspect-ratio: 16/10) and (min-width: 1400px) {
+  .MuiGrid-spacing-xs-2 > .MuiGrid-item {
+    padding: 12px;
+  }
+  
+  .MuiGrid-spacing-xs-3 > .MuiGrid-item {
+    padding: 16px;
+  }
+}
+
+/* Card height adjustments */
+@media (min-aspect-ratio: 16/10) {
+  .MuiCard-root {
+    min-height: auto;
+    height: auto;
+  }
+  
+  .MuiCardContent-root {
+    padding-bottom: 24px;
+  }
+}
+
+/* Tab scrolling improvements */
+.MuiTabs-scrollButtons {
+  display: flex !important;
+}
+
+@media (min-aspect-ratio: 16/10) {
+  .MuiTabs-root {
+    margin-bottom: 24px;
+  }
+  
+  .MuiTab-root {
+    min-width: auto;
+    padding: 12px 20px;
+  }
 }
