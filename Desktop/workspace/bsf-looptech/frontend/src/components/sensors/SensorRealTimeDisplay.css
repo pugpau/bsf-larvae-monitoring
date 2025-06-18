@@ -6,6 +6,13 @@
   min-height: 100vh;
 }
 
+/* 16:10 aspect ratio adjustments */
+@media (min-aspect-ratio: 16/10) {
+  .sensor-realtime-display {
+    padding: 24px 32px;
+  }
+}
+
 .display-header {
   display: flex;
   justify-content: space-between;
@@ -117,6 +124,14 @@
   gap: 20px;
 }
 
+/* 16:10 aspect ratio optimizations */
+@media (min-aspect-ratio: 16/10) and (min-width: 1400px) {
+  .content-grid {
+    grid-template-columns: 3fr 1fr;
+    gap: 24px;
+  }
+}
+
 @media (max-width: 768px) {
   .content-grid {
     grid-template-columns: 1fr;
@@ -145,6 +160,14 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 15px;
+}
+
+/* Better grid layout for 16:10 screens */
+@media (min-aspect-ratio: 16/10) and (min-width: 1600px) {
+  .devices-grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 20px;
+  }
 }
 
 .device-card {
@@ -263,6 +286,13 @@
   gap: 10px;
   max-height: 500px;
   overflow-y: auto;
+}
+
+/* Increase alerts height on 16:10 screens */
+@media (min-aspect-ratio: 16/10) {
+  .alerts-list {
+    max-height: 60vh;
+  }
 }
 
 .alert-item {
