@@ -101,12 +101,19 @@ export const useWebSocket = (url, options = {}) => {
       return;
     }
 
+    // Skip WebSocket connection in development mode if demo token
+    const token = localStorage.getItem('accessToken');
+    if (process.env.NODE_ENV === 'development' && token === 'demo-token') {
+      console.log('Skipping WebSocket connection in demo mode');
+      setConnectionState(CONNECTION_STATES.DISCONNECTED);
+      return;
+    }
+
     setConnectionState(CONNECTION_STATES.CONNECTING);
     setError(null);
 
     try {
       // Add auth token to WebSocket URL
-      const token = localStorage.getItem('accessToken');
       const wsUrl = token ? `${url}?token=${token}` : url;
       
       const ws = new WebSocket(wsUrl);

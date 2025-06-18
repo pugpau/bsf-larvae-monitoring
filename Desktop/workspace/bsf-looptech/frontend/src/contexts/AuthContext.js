@@ -32,19 +32,31 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       const token = localStorage.getItem('accessToken');
       if (token) {
-        try {
-          // Set auth header
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          
-          // Get current user
-          const response = await axios.get('/api/auth/me');
-          setUser(response.data);
-        } catch (err) {
-          console.error('Auth check failed:', err);
-          // Clear invalid token
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          delete axios.defaults.headers.common['Authorization'];
+        // Development mode: Check for demo token
+        if (process.env.NODE_ENV === 'development' && token === 'demo-token') {
+          // Use mock user data for development
+          const mockUser = {
+            id: '1',
+            username: 'demo',
+            role: 'admin',
+            permissions: ['read', 'write', 'admin']
+          };
+          setUser(mockUser);
+        } else {
+          try {
+            // Set auth header
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            
+            // Get current user
+            const response = await axios.get('/auth/me');
+            setUser(response.data);
+          } catch (err) {
+            console.error('Auth check failed:', err);
+            // Clear invalid token
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            delete axios.defaults.headers.common['Authorization'];
+          }
         }
       }
       setLoading(false);
@@ -58,15 +70,34 @@ export const AuthProvider = ({ children }) => {
     try {
       setError(null);
       
+      // Development mode: Allow demo login
+      if (process.env.NODE_ENV === 'development' && 
+          username === 'demo' && password === 'demo') {
+        
+        // Mock user data for development
+        const mockUser = {
+          id: '1',
+          username: 'demo',
+          role: 'admin',
+          permissions: ['read', 'write', 'admin']
+        };
+        
+        // Store mock tokens
+        localStorage.setItem('accessToken', 'demo-token');
+        localStorage.setItem('refreshToken', 'demo-refresh-token');
+        
+        setUser(mockUser);
+        return { success: true };
+      }
+      
       // Create form data for OAuth2 compatibility
       const formData = new URLSearchParams();
       formData.append('username', username);
       formData.append('password', password);
 
-      const response = await axios.post('/api/auth/login', formData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
+      const response = await axios.post('/auth/login', {
+        username,
+        password
       });
 
       const { access_token, refresh_token, token_type } = response.data;
@@ -79,7 +110,7 @@ export const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `${token_type} ${access_token}`;
 
       // Get user info
-      const userResponse = await axios.get('/api/auth/me');
+      const userResponse = await axios.get('/auth/me');
       setUser(userResponse.data);
 
       return { success: true };
@@ -93,7 +124,7 @@ export const AuthProvider = ({ children }) => {
   // Logout function
   const logout = async () => {
     try {
-      await axios.post('/api/auth/logout');
+      await axios.post('/auth/logout');
     } catch (err) {
       console.error('Logout error:', err);
     }
@@ -113,7 +144,7 @@ export const AuthProvider = ({ children }) => {
         throw new Error('No refresh token');
       }
 
-      const response = await axios.post('/api/auth/refresh', {
+      const response = await axios.post('/auth/refresh', {
         refresh_token: refreshToken
       });
 
