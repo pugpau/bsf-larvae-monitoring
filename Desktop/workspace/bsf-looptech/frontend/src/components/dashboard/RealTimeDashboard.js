@@ -33,8 +33,7 @@ import {
 } from '@mui/icons-material';
 import SensorRealTimeDisplay from '../sensors/SensorRealTimeDisplay';
 import SensorChartsRealTime from '../sensors/SensorChartsRealTime';
-import AlertNotificationCenter from '../alerts/AlertNotificationCenter';
-import { useFarmWebSocket, MESSAGE_TYPES } from '../../hooks/useWebSocket';
+import { useRealtimeData } from '../../hooks/useRealtimeData';
 
 const RealTimeDashboard = () => {
   // State management
@@ -66,27 +65,24 @@ const RealTimeDashboard = () => {
     uptime: 0
   });
 
-  // WebSocket connection for dashboard
+  // Real-time data connection for dashboard
   const {
-    isConnected,
-    connectionState,
-    stats,
-    getConnectionInfo
-  } = useFarmWebSocket(selectedFarm, {
-    onConnect: () => {
-      console.log(`Dashboard connected to farm ${selectedFarm}`);
-      setLastRefresh(new Date());
-    },
-    onMessage: (message) => {
-      // Update dashboard stats based on incoming messages
-      if (message.message_type === MESSAGE_TYPES.SENSOR_DATA) {
-        setDashboardStats(prev => ({
-          ...prev,
-          dataPoints: prev.dataPoints + 1
-        }));
-      }
-    }
+    isRunning: isConnected,
+    stats: realtimeStats
+  } = useRealtimeData({
+    autoStart: dashboardSettings.autoRefresh && !isPaused,
+    updateInterval: dashboardSettings.refreshInterval,
+    maxDataPoints: 100,
+    farmId: selectedFarm
   });
+
+  const connectionState = isConnected ? 'connected' : 'disconnected';
+  const stats = {
+    messagesReceived: realtimeStats.totalReadings || 0,
+    messagesSent: 0,
+    connectionAttempts: 1,
+    lastConnectedAt: new Date().toISOString()
+  };
 
   // Auto-refresh functionality
   useEffect(() => {
@@ -148,7 +144,14 @@ const RealTimeDashboard = () => {
   };
 
   return (
-    <Box sx={{ p: 2, minHeight: '100vh', bgcolor: '#f5f5f5' }}>
+    <Box sx={{ 
+      p: { xs: 1, sm: 2, md: 3 }, 
+      minHeight: '100vh', 
+      bgcolor: '#f5f5f5',
+      '@media (min-aspect-ratio: 16/10)': {
+        px: { md: 4, lg: 5 }
+      }
+    }}>
       {/* Dashboard Header */}
       <Card sx={{ mb: 2 }}>
         <CardContent>
@@ -292,70 +295,79 @@ const RealTimeDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Main Dashboard Content */}
-      <Grid container spacing={2}>
+      {/* Main Dashboard Content - Vertical Layout */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {/* Real-time Sensor Display */}
-        <Grid item xs={12} lg={6}>
-          <Card>
-            <CardHeader 
-              title="リアルタイムセンサーデータ"
-              action={
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={dashboardSettings.showDeviceStatus}
-                      onChange={(e) => handleSettingChange('showDeviceStatus', e.target.checked)}
-                      size="small"
-                    />
-                  }
-                  label="デバイス状態"
-                />
-              }
-            />
-            <CardContent sx={{ height: 600, overflow: 'auto' }}>
-              <SensorRealTimeDisplay 
-                farmId={selectedFarm}
-                showAlerts={dashboardSettings.showAlerts}
+        <Card>
+          <CardHeader 
+            title="リアルタイムセンサーデータ"
+            action={
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={dashboardSettings.showDeviceStatus}
+                    onChange={(e) => handleSettingChange('showDeviceStatus', e.target.checked)}
+                    size="small"
+                  />
+                }
+                label="デバイス状態"
               />
-            </CardContent>
-          </Card>
-        </Grid>
+            }
+          />
+          <CardContent sx={{ 
+            minHeight: { xs: 300, sm: 400, md: 500 },
+            maxHeight: { xs: 500, sm: 600, md: 700 },
+            overflow: 'auto',
+            '@media (min-aspect-ratio: 16/10)': {
+              minHeight: 400,
+              maxHeight: 600
+            }
+          }}>
+            <SensorRealTimeDisplay 
+              farmId={selectedFarm}
+              showAlerts={dashboardSettings.showAlerts}
+            />
+          </CardContent>
+        </Card>
 
         {/* Real-time Charts */}
         {dashboardSettings.showCharts && (
-          <Grid item xs={12} lg={6}>
-            <Card>
-              <CardHeader 
-                title="リアルタイムチャート"
-                action={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="caption">高さ:</Typography>
-                    <Select
-                      value={dashboardSettings.chartHeight}
-                      onChange={(e) => handleSettingChange('chartHeight', e.target.value)}
-                      size="small"
-                      sx={{ minWidth: 80 }}
-                    >
-                      <MenuItem value={300}>小</MenuItem>
-                      <MenuItem value={400}>中</MenuItem>
-                      <MenuItem value={500}>大</MenuItem>
-                    </Select>
-                  </Box>
-                }
+          <Card>
+            <CardHeader 
+              title="リアルタイムチャート"
+              action={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="caption">高さ:</Typography>
+                  <Select
+                    value={dashboardSettings.chartHeight}
+                    onChange={(e) => handleSettingChange('chartHeight', e.target.value)}
+                    size="small"
+                    sx={{ minWidth: 80 }}
+                  >
+                    <MenuItem value={300}>小</MenuItem>
+                    <MenuItem value={400}>中</MenuItem>
+                    <MenuItem value={500}>大</MenuItem>
+                  </Select>
+                </Box>
+              }
+            />
+            <CardContent sx={{ 
+              minHeight: dashboardSettings.chartHeight,
+              overflow: 'auto',
+              '@media (min-aspect-ratio: 16/10)': {
+                minHeight: dashboardSettings.chartHeight + 100
+              }
+            }}>
+              <SensorChartsRealTime 
+                farmId={selectedFarm}
+                maxDataPoints={100}
               />
-              <CardContent sx={{ height: dashboardSettings.chartHeight + 200, overflow: 'auto' }}>
-                <SensorChartsRealTime 
-                  farmId={selectedFarm}
-                  maxDataPoints={100}
-                />
-              </CardContent>
-            </Card>
-          </Grid>
+            </CardContent>
+          </Card>
         )}
 
         {/* System Information */}
-        <Grid item xs={12}>
-          <Card>
+        <Card>
             <CardHeader title="システム情報" />
             <CardContent>
               <Grid container spacing={2}>
@@ -397,16 +409,8 @@ const RealTimeDashboard = () => {
               </Grid>
             </CardContent>
           </Card>
-        </Grid>
-      </Grid>
+      </Box>
 
-      {/* Alert Notification Center */}
-      {dashboardSettings.showAlerts && (
-        <AlertNotificationCenter 
-          farmId={selectedFarm}
-          position="bottom-right"
-        />
-      )}
     </Box>
   );
 };
