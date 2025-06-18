@@ -30,14 +30,22 @@ import {
   Link as LinkIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import { getSubstrateTypes, saveSubstrateBatch, updateSubstrateBatch } from '../../utils/storage';
 
 const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
   const [id, setId] = useState('');
   const [farmId, setFarmId] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [totalWeight, setTotalWeight] = useState('');
+  // 基質重量管理
+  const [initialSubstrateWeight, setInitialSubstrateWeight] = useState('');
+  const [finalSubstrateWeight, setFinalSubstrateWeight] = useState('');
   const [weightUnit, setWeightUnit] = useState('kg');
+  
+  // 幼虫重量管理
+  const [initialLarvaWeight, setInitialLarvaWeight] = useState('');
+  const [finalLarvaWeight, setFinalLarvaWeight] = useState('');
+  const [larvaCount, setLarvaCount] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
   const [location, setLocation] = useState('');
 
@@ -56,7 +64,9 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
   const [errors, setErrors] = useState({
     farmId: '',
     name: '',
-    totalWeight: '',
+    initialSubstrateWeight: '',
+    initialLarvaWeight: '',
+    larvaCount: '',
     components: []
   });
   
@@ -68,12 +78,42 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
     const fetchData = async () => {
       setLoading(true);
       try {
+        // ローカルストレージから基質タイプを取得
+        const storedSubstrateTypes = getSubstrateTypes();
+        
+        // モックセンサーデバイスデータ
+        const mockSensorDevices = [
+          {
+            id: 'device1',
+            farm_id: 'farm1',
+            device_id: 'temp_sensor_001',
+            device_type: 'temperature_sensor',
+            name: '温度センサー1',
+            location: 'エリアA',
+            status: 'active'
+          },
+          {
+            id: 'device2',
+            farm_id: 'farm1',
+            device_id: 'humidity_sensor_001',
+            device_type: 'humidity_sensor',
+            name: '湿度センサー1',
+            location: 'エリアA',
+            status: 'active'
+          }
+        ];
+        
+        setSubstrateTypes(storedSubstrateTypes);
+        setAvailableSensorDevices(mockSensorDevices);
+        setLoading(false);
+        return;
+        
         // 基質タイプを取得
-        const typesResponse = await axios.get('http://localhost:8000/substrate/types');
+        const typesResponse = await axios.get('http://localhost:8000/substrate/types?farm_id=farm1');
         setSubstrateTypes(typesResponse.data);
         
         // センサーデバイスを取得
-        const devicesResponse = await axios.get('http://localhost:8000/sensors/devices');
+        const devicesResponse = await axios.get('http://localhost:8000/sensors/devices?farm_id=farm1');
         setAvailableSensorDevices(devicesResponse.data);
       } catch (error) {
         console.error('データの取得に失敗しました', error);
@@ -94,6 +134,14 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
     setTotalRatio(total);
   }, [components]);
 
+  // タブが切り替わった時に基質タイプを再読み込み
+  useEffect(() => {
+    if (substrateTypes.length === 0) {
+      const storedTypes = getSubstrateTypes();
+      setSubstrateTypes(storedTypes);
+    }
+  }, [substrateTypes.length]);
+
   // 初期データがある場合はフォームに設定
   useEffect(() => {
     if (initialData) {
@@ -101,7 +149,11 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
       setFarmId(initialData.farm_id || '');
       setName(initialData.name || '');
       setDescription(initialData.description || '');
-      setTotalWeight(initialData.total_weight || '');
+      setInitialSubstrateWeight(initialData.initial_substrate_weight || '');
+      setFinalSubstrateWeight(initialData.final_substrate_weight || '');
+      setInitialLarvaWeight(initialData.initial_larva_weight || '');
+      setFinalLarvaWeight(initialData.final_larva_weight || '');
+      setLarvaCount(initialData.larva_count || '');
       setWeightUnit(initialData.weight_unit || 'kg');
       setBatchNumber(initialData.batch_number || '');
       setLocation(initialData.location || '');
@@ -126,6 +178,28 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
       // 関連センサーデバイスを取得
       const fetchLinkedSensors = async () => {
         try {
+          // デモモードの場合はモックデータを返す
+          const token = localStorage.getItem('accessToken');
+          if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+            const mockLinkedDevices = [
+              {
+                id: 'device3',
+                farm_id: 'farm1',
+                device_id: 'pressure_sensor_001',
+                device_type: 'pressure_sensor',
+                name: '気圧センサー1',
+                location: 'エリアB',
+                status: 'active',
+                substrate_batch_id: initialData.id,
+                last_seen: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }
+            ];
+            setSensorDevices(mockLinkedDevices);
+            return;
+          }
+          
           const response = await axios.get(`http://localhost:8000/sensors/devices?substrate_batch_id=${initialData.id}`);
           setSensorDevices(response.data);
         } catch (error) {
@@ -162,7 +236,11 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
     setFarmId('');
     setName('');
     setDescription('');
-    setTotalWeight('');
+    setInitialSubstrateWeight('');
+    setFinalSubstrateWeight('');
+    setInitialLarvaWeight('');
+    setFinalLarvaWeight('');
+    setLarvaCount('');
     setWeightUnit('kg');
     setBatchNumber('');
     setLocation('');
@@ -209,7 +287,9 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
     const newErrors = {
       farmId: '',
       name: '',
-      totalWeight: '',
+      initialSubstrateWeight: '',
+      initialLarvaWeight: '',
+      larvaCount: '',
       components: Array(components.length).fill('')
     };
     
@@ -227,12 +307,30 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
       isValid = false;
     }
     
-    // 総重量のバリデーション
-    if (!totalWeight) {
-      newErrors.totalWeight = '総重量は必須です';
+    // 基質初期重量のバリデーション
+    if (!initialSubstrateWeight) {
+      newErrors.initialSubstrateWeight = '基質初期重量は必須です';
       isValid = false;
-    } else if (isNaN(parseFloat(totalWeight)) || parseFloat(totalWeight) <= 0) {
-      newErrors.totalWeight = '総重量は正の数値で入力してください';
+    } else if (isNaN(parseFloat(initialSubstrateWeight)) || parseFloat(initialSubstrateWeight) <= 0) {
+      newErrors.initialSubstrateWeight = '基質初期重量は正の数値で入力してください';
+      isValid = false;
+    }
+    
+    // 幼虫初期重量のバリデーション
+    if (!initialLarvaWeight) {
+      newErrors.initialLarvaWeight = '幼虫初期重量は必須です';
+      isValid = false;
+    } else if (isNaN(parseFloat(initialLarvaWeight)) || parseFloat(initialLarvaWeight) < 0) {
+      newErrors.initialLarvaWeight = '幼虫初期重量は0以上の数値で入力してください';
+      isValid = false;
+    }
+    
+    // 幼虫数のバリデーション
+    if (!larvaCount) {
+      newErrors.larvaCount = '幼虫数は必須です';
+      isValid = false;
+    } else if (isNaN(parseInt(larvaCount)) || parseInt(larvaCount) <= 0) {
+      newErrors.larvaCount = '幼虫数は正の整数で入力してください';
       isValid = false;
     }
     
@@ -287,8 +385,20 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
     
     setLoading(true);
     try {
+      // デモモードの場合はモック処理
+      const token = localStorage.getItem('accessToken');
+      if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+        setSensorDevices([...sensorDevices, device]);
+        setSelectedSensorDevice('');
+        setSnackbarMessage('センサーデバイスを関連付けました。（デモモード）');
+        setSnackbarSeverity('success');
+        setOpenSnackbar(true);
+        setLoading(false);
+        return;
+      }
+      
       // デバイスを基質バッチに関連付ける
-      await axios.patch(`http://localhost:8000/sensors/devices/${device.id}`, {
+      await axios.patch(`http://localhost:8000/sensors/devices/${device.device_id}?farm_id=farm1`, {
         substrate_batch_id: id
       });
       
@@ -313,6 +423,17 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
   const removeSensorDevice = async (deviceId) => {
     setLoading(true);
     try {
+      // デモモードの場合はモック処理
+      const token = localStorage.getItem('accessToken');
+      if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+        setSensorDevices(sensorDevices.filter(d => d.id !== deviceId));
+        setSnackbarMessage('センサーデバイスの関連付けを解除しました。（デモモード）');
+        setSnackbarSeverity('success');
+        setOpenSnackbar(true);
+        setLoading(false);
+        return;
+      }
+      
       // デバイスの関連付けを解除
       await axios.patch(`http://localhost:8000/sensors/devices/${deviceId}`, {
         substrate_batch_id: null
@@ -349,13 +470,40 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
       name,
       description,
       components,
-      total_weight: parseFloat(totalWeight),
+      initial_substrate_weight: parseFloat(initialSubstrateWeight),
+      final_substrate_weight: finalSubstrateWeight ? parseFloat(finalSubstrateWeight) : null,
+      initial_larva_weight: parseFloat(initialLarvaWeight),
+      final_larva_weight: finalLarvaWeight ? parseFloat(finalLarvaWeight) : null,
+      larva_count: parseInt(larvaCount),
       weight_unit: weightUnit,
       batch_number: batchNumber,
       location
     };
 
     try {
+      // ローカルストレージを使用した処理
+      let result;
+      if (isEditing) {
+        // 更新処理
+        result = updateSubstrateBatch(id, data);
+        setSnackbarMessage('基質バッチを更新しました。');
+      } else {
+        // 新規作成
+        result = saveSubstrateBatch({
+          ...data,
+          batch_number: batchNumber
+        });
+        setId(result.id);
+        setIsEditing(true);
+        setSnackbarMessage('基質バッチを登録しました。');
+      }
+      
+      console.log('基質バッチ操作成功:', result);
+      setSnackbarSeverity('success');
+      setOpenSnackbar(true);
+      setLoading(false);
+      return;
+      
       let response;
       if (isEditing) {
         // 更新（PATCHメソッドを使用）
@@ -363,11 +511,16 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
         const updateData = {
           name,
           description,
-          total_weight: parseFloat(totalWeight),
+          initial_substrate_weight: parseFloat(initialSubstrateWeight),
+          final_substrate_weight: finalSubstrateWeight ? parseFloat(finalSubstrateWeight) : null,
+          initial_larva_weight: parseFloat(initialLarvaWeight),
+          final_larva_weight: finalLarvaWeight ? parseFloat(finalLarvaWeight) : null,
+          larva_count: parseInt(larvaCount),
+          weight_unit: weightUnit,
           location,
           change_reason: "基質バッチの更新"
         };
-        response = await axios.patch(`http://localhost:8000/substrate/batches/${id}`, updateData);
+        response = await axios.patch(`http://localhost:8000/substrate/batches/${id}?farm_id=farm1`, updateData);
         setSnackbarMessage('基質バッチを更新しました。');
       } else {
         // 新規作成
@@ -529,28 +682,141 @@ const SubstrateBatchForm = ({ initialData, onSubmitSuccess }) => {
                 />
               </Grid>
               
-              <Grid item xs={8}>
+              {/* 基質重量管理 */}
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                  基質重量管理
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={6}>
                 <TextField
                   fullWidth
-                  label="総重量"
+                  label="基質初期重量 (投入時)"
                   type="number"
-                  value={totalWeight}
-                  onChange={(e) => setTotalWeight(e.target.value)}
+                  value={initialSubstrateWeight}
+                  onChange={(e) => setInitialSubstrateWeight(e.target.value)}
                   required
-                  error={!!errors.totalWeight}
-                  helperText={errors.totalWeight}
+                  error={!!errors.initialSubstrateWeight}
+                  helperText={errors.initialSubstrateWeight}
                   onBlur={() => {
-                    if (!totalWeight) {
-                      setErrors({...errors, totalWeight: '総重量は必須です'});
-                    } else if (isNaN(parseFloat(totalWeight)) || parseFloat(totalWeight) <= 0) {
-                      setErrors({...errors, totalWeight: '総重量は正の数値で入力してください'});
+                    if (!initialSubstrateWeight) {
+                      setErrors({...errors, initialSubstrateWeight: '基質初期重量は必須です'});
+                    } else if (isNaN(parseFloat(initialSubstrateWeight)) || parseFloat(initialSubstrateWeight) <= 0) {
+                      setErrors({...errors, initialSubstrateWeight: '基質初期重量は正の数値で入力してください'});
                     } else {
-                      setErrors({...errors, totalWeight: ''});
+                      setErrors({...errors, initialSubstrateWeight: ''});
                     }
                   }}
                   inputProps={{ min: 0.1, step: 0.1 }}
                 />
               </Grid>
+              
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  label="基質最終重量 (残基質)"
+                  type="number"
+                  value={finalSubstrateWeight}
+                  onChange={(e) => setFinalSubstrateWeight(e.target.value)}
+                  helperText="バッチ終了時の残基質重量（任意）"
+                  inputProps={{ min: 0, step: 0.1 }}
+                />
+              </Grid>
+              
+              {/* 幼虫重量管理 */}
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                  幼虫重量管理
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={4}>
+                <TextField
+                  fullWidth
+                  label="幼虫初期重量"
+                  type="number"
+                  value={initialLarvaWeight}
+                  onChange={(e) => setInitialLarvaWeight(e.target.value)}
+                  required
+                  error={!!errors.initialLarvaWeight}
+                  helperText={errors.initialLarvaWeight}
+                  onBlur={() => {
+                    if (!initialLarvaWeight) {
+                      setErrors({...errors, initialLarvaWeight: '幼虫初期重量は必須です'});
+                    } else if (isNaN(parseFloat(initialLarvaWeight)) || parseFloat(initialLarvaWeight) < 0) {
+                      setErrors({...errors, initialLarvaWeight: '幼虫初期重量は0以上の数値で入力してください'});
+                    } else {
+                      setErrors({...errors, initialLarvaWeight: ''});
+                    }
+                  }}
+                  inputProps={{ min: 0, step: 0.1 }}
+                />
+              </Grid>
+              
+              <Grid item xs={4}>
+                <TextField
+                  fullWidth
+                  label="幼虫最終重量"
+                  type="number"
+                  value={finalLarvaWeight}
+                  onChange={(e) => setFinalLarvaWeight(e.target.value)}
+                  helperText="バッチ終了時の幼虫重量（任意）"
+                  inputProps={{ min: 0, step: 0.1 }}
+                />
+              </Grid>
+              
+              <Grid item xs={4}>
+                <TextField
+                  fullWidth
+                  label="幼虫数"
+                  type="number"
+                  value={larvaCount}
+                  onChange={(e) => setLarvaCount(e.target.value)}
+                  required
+                  error={!!errors.larvaCount}
+                  helperText={errors.larvaCount}
+                  onBlur={() => {
+                    if (!larvaCount) {
+                      setErrors({...errors, larvaCount: '幼虫数は必須です'});
+                    } else if (isNaN(parseInt(larvaCount)) || parseInt(larvaCount) <= 0) {
+                      setErrors({...errors, larvaCount: '幼虫数は正の整数で入力してください'});
+                    } else {
+                      setErrors({...errors, larvaCount: ''});
+                    }
+                  }}
+                  inputProps={{ min: 1, step: 1 }}
+                />
+              </Grid>
+              
+              {/* 重量変化計算表示 */}
+              {(initialSubstrateWeight && finalSubstrateWeight && initialLarvaWeight && finalLarvaWeight) && (
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 2, mt: 2, bgcolor: 'background.default' }}>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
+                      重量変化分析
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">
+                          基質消費量: {(parseFloat(initialSubstrateWeight) - parseFloat(finalSubstrateWeight)).toFixed(1)} {weightUnit}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          基質変換率: {((parseFloat(finalLarvaWeight) - parseFloat(initialLarvaWeight)) / (parseFloat(initialSubstrateWeight) - parseFloat(finalSubstrateWeight)) * 100).toFixed(1)}%
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">
+                          幼虫重量増加: {(parseFloat(finalLarvaWeight) - parseFloat(initialLarvaWeight)).toFixed(1)} {weightUnit}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          平均幼虫重量: {larvaCount ? (parseFloat(finalLarvaWeight) / parseInt(larvaCount) * 1000).toFixed(1) : '0'} g/匹
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Grid>
+              )}
               
               <Grid item xs={4}>
                 <FormControl fullWidth>

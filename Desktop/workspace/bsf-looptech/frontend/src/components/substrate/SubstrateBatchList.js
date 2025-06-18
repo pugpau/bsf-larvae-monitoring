@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Info as InfoIcon } from '@mui/icons-material';
 import axios from 'axios';
+import { getSubstrateBatches, deleteSubstrateBatch } from '../../utils/storage';
 
 const SubstrateBatchList = ({ onEdit }) => {
   const [substrateBatches, setSubstrateBatches] = useState([]);
@@ -38,55 +39,10 @@ const SubstrateBatchList = ({ onEdit }) => {
   const fetchSubstrateBatches = async () => {
     setLoading(true);
     try {
-      // モックデータを使用
-      const mockData = [
-        {
-          id: '1',
-          farm_id: '112',
-          name: '下水汚泥バッチA',
-          description: '2025年4月1日に作成した下水汚泥バッチ',
-          total_weight: 100,
-          weight_unit: 'kg',
-          batch_number: 'B20250401-001',
-          location: 'エリアA-1',
-          components: [
-            {
-              substrate_type_id: '1',
-              substrate_type_name: '下水汚泥タイプA',
-              ratio: 70
-            },
-            {
-              substrate_type_id: '3',
-              substrate_type_name: 'おが屑タイプC',
-              ratio: 30
-            }
-          ]
-        },
-        {
-          id: '2',
-          farm_id: '112',
-          name: '鶏糞バッチB',
-          description: '2025年4月2日に作成した鶏糞バッチ',
-          total_weight: 80,
-          weight_unit: 'kg',
-          batch_number: 'B20250402-001',
-          location: 'エリアB-2',
-          components: [
-            {
-              substrate_type_id: '2',
-              substrate_type_name: '鶏糞タイプB',
-              ratio: 60
-            },
-            {
-              substrate_type_id: '3',
-              substrate_type_name: 'おが屑タイプC',
-              ratio: 40
-            }
-          ]
-        }
-      ];
+      // ローカルストレージから基質バッチを取得
+      const data = getSubstrateBatches();
       
-      setSubstrateBatches(mockData);
+      setSubstrateBatches(data);
       setError(null);
     } catch (err) {
       console.error('基質バッチの取得に失敗しました', err);
@@ -120,7 +76,8 @@ const SubstrateBatchList = ({ onEdit }) => {
     if (!batchToDelete) return;
 
     try {
-      // モックデータの削除処理
+      // ローカルストレージから削除
+      deleteSubstrateBatch(batchToDelete.id);
       setSubstrateBatches(substrateBatches.filter(batch => batch.id !== batchToDelete.id));
       setSnackbarMessage('基質バッチを削除しました。');
       setSnackbarSeverity('success');

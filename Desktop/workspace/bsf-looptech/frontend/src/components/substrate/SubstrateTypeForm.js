@@ -16,15 +16,14 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import axios from 'axios';
+import { saveSubstrateType, updateSubstrateType } from '../../utils/storage';
+import { SUBSTRATE_CATEGORIES } from '../../utils/unifiedData';
 
-// SubstrateTypeEnum に対応する型
-const SubstrateTypeOptions = [
-  { value: 'sewage_sludge', label: '下水汚泥' },
-  { value: 'pig_manure', label: '豚の糞尿' },
-  { value: 'chicken_manure', label: '鶏糞' },
-  { value: 'sawdust', label: 'おが屑' },
-  { value: 'other', label: 'その他' }
-];
+// 統一された基質カテゴリを使用
+const SubstrateTypeOptions = Object.entries(SUBSTRATE_CATEGORIES).map(([key, label]) => ({
+  value: key,
+  label: label
+}));
 
 const SubstrateTypeForm = ({ initialData, onSubmitSuccess }) => {
   const [id, setId] = useState('');
@@ -154,17 +153,21 @@ const SubstrateTypeForm = ({ initialData, onSubmitSuccess }) => {
     console.log('送信データ:', data);
 
     try {
-      // モックデータ処理
+      let result;
       if (isEditing) {
-        // 更新処理（実際にはAPIに送信せず、成功したと見なす）
-        console.log('基質タイプ更新:', id, data);
+        // 更新処理
+        result = updateSubstrateType(id, data);
         setSnackbarMessage('基質タイプを更新しました。');
       } else {
-        // 新規作成（実際にはAPIに送信せず、成功したと見なす）
-        console.log('基質タイプ登録:', data);
+        // 新規作成
+        result = saveSubstrateType({
+          ...data,
+          farm_id: 'farm1' // デフォルトファームID
+        });
         setSnackbarMessage('基質タイプを登録しました。');
       }
       
+      console.log('基質タイプ操作成功:', result);
       setSnackbarSeverity('success');
       setOpenSnackbar(true);
       resetForm();

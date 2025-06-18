@@ -21,6 +21,8 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import axios from 'axios';
+import { getSubstrateTypes, deleteSubstrateType } from '../../utils/storage';
+import { getCategoryLabel } from '../../utils/unifiedData';
 
 const SubstrateTypeList = ({ onEdit }) => {
   const [substrateTypes, setSubstrateTypes] = useState([]);
@@ -69,7 +71,9 @@ const SubstrateTypeList = ({ onEdit }) => {
         }
       ];
       
-      setSubstrateTypes(mockData);
+      // ローカルストレージから基質タイプを取得
+      const data = getSubstrateTypes();
+      setSubstrateTypes(data);
       setError(null);
     } catch (err) {
       console.error('基質タイプの取得に失敗しました', err);
@@ -98,7 +102,8 @@ const SubstrateTypeList = ({ onEdit }) => {
     if (!typeToDelete) return;
 
     try {
-      // モックデータの削除処理
+      // ローカルストレージから削除
+      deleteSubstrateType(typeToDelete.id);
       setSubstrateTypes(substrateTypes.filter(type => type.id !== typeToDelete.id));
       setSnackbarMessage('基質タイプを削除しました。');
       setSnackbarSeverity('success');
@@ -157,7 +162,7 @@ const SubstrateTypeList = ({ onEdit }) => {
               {substrateTypes.map((type) => (
                 <TableRow key={type.id}>
                   <TableCell>{type.name}</TableCell>
-                  <TableCell>{type.type}</TableCell>
+                  <TableCell>{getCategoryLabel(type.type)}</TableCell>
                   <TableCell>{type.description}</TableCell>
                   <TableCell>
                     <IconButton onClick={() => handleEditClick(type)}>
