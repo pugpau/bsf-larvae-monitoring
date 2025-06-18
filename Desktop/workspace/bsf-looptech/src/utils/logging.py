@@ -7,18 +7,27 @@ import logging
 import sys
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Optional, TYPE_CHECKING
 from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
 from contextlib import contextmanager
 
 from src.config import settings
 
+if TYPE_CHECKING:
+    class LogRecordWithContext(logging.LogRecord):
+        """LogRecord with additional context attributes."""
+        user_id: Optional[str]
+        farm_id: Optional[str]
+        device_id: Optional[str]
+        trace_id: Optional[str]
+        duration: Optional[float]
+
 
 class StructuredFormatter(logging.Formatter):
     """Custom formatter for structured logging."""
     
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """Format log record with structured data."""
         log_data = {
             "timestamp": datetime.utcnow().isoformat(),
@@ -32,21 +41,21 @@ class StructuredFormatter(logging.Formatter):
         
         # Add extra fields if present
         if hasattr(record, 'user_id'):
-            log_data['user_id'] = record.user_id
+            log_data['user_id'] = getattr(record, 'user_id')
         if hasattr(record, 'farm_id'):
-            log_data['farm_id'] = record.farm_id
+            log_data['farm_id'] = getattr(record, 'farm_id')
         if hasattr(record, 'device_id'):
-            log_data['device_id'] = record.device_id
+            log_data['device_id'] = getattr(record, 'device_id')
         if hasattr(record, 'trace_id'):
-            log_data['trace_id'] = record.trace_id
+            log_data['trace_id'] = getattr(record, 'trace_id')
         if hasattr(record, 'duration'):
-            log_data['duration'] = record.duration
+            log_data['duration'] = getattr(record, 'duration')
         
         # Add exception info if present
-        if record.exc_info:
+        if record.exc_info and record.exc_info[0] is not None:
             log_data['exception'] = {
-                'type': record.exc_info[0].__name__,
-                'message': str(record.exc_info[1]),
+                'type': record.exc_info[0].__name__ if record.exc_info[0] else 'Unknown',
+                'message': str(record.exc_info[1]) if record.exc_info[1] else '',
                 'traceback': self.formatException(record.exc_info)
             }
         
@@ -92,7 +101,7 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def log_execution_time(func_name: str = None):
+def log_execution_time(func_name: Optional[str] = None):
     """Decorator to log function execution time."""
     def decorator(func):
         @wraps(func)
@@ -207,12 +216,17 @@ def log_database_error(logger: logging.Logger, operation: str, error: Exception,
     
     if isinstance(error, SQLAlchemyError):
         # Extract additional SQLAlchemy error details
-        if hasattr(error, 'orig'):
-            error_data['original_error'] = str(error.orig)
-        if hasattr(error, 'statement'):
-            error_data['sql_statement'] = error.statement
-        if hasattr(error, 'params'):
-            error_data['sql_params'] = error.params
+        orig_error = getattr(error, 'orig', None)
+        if orig_error is not None:
+            error_data['original_error'] = str(orig_error)
+        
+        statement = getattr(error, 'statement', None)
+        if statement is not None:
+            error_data['sql_statement'] = statement
+            
+        params = getattr(error, 'params', None)
+        if params is not None:
+            error_data['sql_params'] = params
     
     logger.error(
         f"Database operation failed: {operation}",

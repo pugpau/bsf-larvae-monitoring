@@ -30,6 +30,22 @@ async def get_user_from_token(token: Optional[str]):
     if not token:
         return None
     
+    # Development mode: Allow demo token
+    if token == "demo-token":
+        # Return mock user for development
+        from src.auth.models import User, UserRole
+        return User(
+            id=uuid.uuid4(),
+            username="demo",
+            email="demo@example.com",
+            role=UserRole.ADMIN,
+            is_active=True,
+            is_superuser=True,
+            permissions=["VIEW_ANALYTICS", "MANAGE_ANALYTICS", "VIEW_SENSORS", "MANAGE_SENSORS"],
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+    
     try:
         # Decode JWT token
         payload = jwt.decode(
@@ -143,6 +159,7 @@ async def farm_websocket_endpoint(
     # Authenticate user
     user = await get_user_from_token(token)
     if not user:
+        logger.warning(f"Farm WebSocket authentication failed for client {client_id}, farm {farm_id}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
         return
     

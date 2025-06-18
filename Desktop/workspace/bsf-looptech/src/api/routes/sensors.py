@@ -213,6 +213,22 @@ async def update_sensor_device(
     
     return result
 
+@router.delete("/devices/{device_id}", response_model=bool)
+async def delete_sensor_device(
+    farm_id: str = Query(..., description="The farm ID"),
+    device_id: str = Path(..., description="The device ID"),
+    service: SensorService = Depends(get_sensor_service)
+):
+    """Delete a sensor device."""
+    # For now, we'll update the status to 'inactive' instead of actually deleting
+    update_data = SensorDeviceUpdate(status="inactive")
+    result = service.update_sensor_device(farm_id, device_id, update_data)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Sensor device not found")
+    
+    return result
+
 # Sensor Alert endpoints
 @router.post("/alerts", response_model=SensorAlertResponse, status_code=201)
 async def create_sensor_alert(
