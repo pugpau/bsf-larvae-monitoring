@@ -54,7 +54,42 @@ const SensorDeviceForm = ({ initialData, onSubmitSuccess }) => {
     const fetchSubstrateBatches = async () => {
       setLoading(true);
       try {
-        const response = await axios.get('http://localhost:8000/substrate/batches');
+        // デモモードの場合はモックデータを返す
+        const token = localStorage.getItem('accessToken');
+        if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+          const mockBatches = [
+            {
+              id: 'batch1',
+              farm_id: 'farm1',
+              name: 'バッチ1',
+              description: 'テスト用基質バッチ1',
+              total_weight: 100,
+              weight_unit: 'kg',
+              batch_number: 'B001',
+              location: 'エリアA',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            },
+            {
+              id: 'batch2',
+              farm_id: 'farm1',
+              name: 'バッチ2',
+              description: 'テスト用基質バッチ2',
+              total_weight: 150,
+              weight_unit: 'kg',
+              batch_number: 'B002',
+              location: 'エリアB',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }
+          ];
+          
+          setSubstrateBatches(mockBatches);
+          setLoading(false);
+          return;
+        }
+        
+        const response = await axios.get('http://localhost:8000/substrate/batches?farm_id=farm1');
         setSubstrateBatches(response.data);
       } catch (error) {
         console.error('基質バッチの取得に失敗しました', error);
@@ -192,10 +227,53 @@ const SensorDeviceForm = ({ initialData, onSubmitSuccess }) => {
     };
 
     try {
+      // デモモードの場合はモック処理
+      const token = localStorage.getItem('accessToken');
+      if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+        // モックレスポンス
+        const mockResponse = {
+          data: {
+            id: isEditing ? id : `device_${Date.now()}`,
+            farm_id: farmId,
+            device_id: deviceId,
+            device_type: deviceType,
+            name,
+            description,
+            location,
+            x_position: xPosition ? parseFloat(xPosition) : null,
+            y_position: yPosition ? parseFloat(yPosition) : null,
+            z_position: zPosition ? parseFloat(zPosition) : null,
+            status,
+            substrate_batch_id: substrateBatchId || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            last_seen: new Date().toISOString()
+          }
+        };
+        
+        if (isEditing) {
+          setSnackbarMessage('センサーデバイスを更新しました。（デモモード）');
+        } else {
+          setSnackbarMessage('センサーデバイスを登録しました。（デモモード）');
+        }
+        
+        console.log('センサーデバイス操作成功 (デモモード):', mockResponse.data);
+        setSnackbarSeverity('success');
+        setOpenSnackbar(true);
+        resetForm();
+        
+        if (onSubmitSuccess) {
+          onSubmitSuccess();
+        }
+        
+        setLoading(false);
+        return;
+      }
+      
       let response;
       if (isEditing) {
         // 更新処理
-        response = await axios.patch(`http://localhost:8000/sensors/devices/${id}`, data);
+        response = await axios.patch(`http://localhost:8000/sensors/devices/${deviceId}?farm_id=${farmId}`, data);
         setSnackbarMessage('センサーデバイスを更新しました。');
       } else {
         // 新規作成処理

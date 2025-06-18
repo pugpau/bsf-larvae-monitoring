@@ -47,7 +47,62 @@ const SensorDeviceList = () => {
   const fetchDevices = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:8000/sensors/devices');
+      // デモモードの場合はモックデータを返す
+      const token = localStorage.getItem('accessToken');
+      console.log('SensorDeviceList fetchDevices - NODE_ENV:', process.env.NODE_ENV, 'token:', token);
+      
+      // Always use demo mode in development or if using demo token
+      if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+        console.log('SensorDeviceList: Using demo mode for sensor devices');
+        const mockDevices = [
+          {
+            id: 'device1',
+            farm_id: 'farm1',
+            device_id: 'temp_sensor_001',
+            device_type: 'temperature_sensor',
+            name: '温度センサー1',
+            location: 'エリアA',
+            status: 'active',
+            substrate_batch_id: null,
+            last_seen: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'device2',
+            farm_id: 'farm1',
+            device_id: 'humidity_sensor_001',
+            device_type: 'humidity_sensor',
+            name: '湿度センサー1',
+            location: 'エリアA',
+            status: 'active',
+            substrate_batch_id: null,
+            last_seen: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'device3',
+            farm_id: 'farm1',
+            device_id: 'pressure_sensor_001',
+            device_type: 'pressure_sensor',
+            name: '気圧センサー1',
+            location: 'エリアB',
+            status: 'active',
+            substrate_batch_id: 'batch1',
+            last_seen: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ];
+        
+        setDevices(mockDevices);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      
+      const response = await axios.get('http://localhost:8000/sensors/devices?farm_id=farm1');
       setDevices(response.data);
       setError(null);
     } catch (error) {
@@ -64,7 +119,45 @@ const SensorDeviceList = () => {
   // 基質バッチ一覧を取得
   const fetchSubstrateBatches = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/substrate/batches');
+      // デモモードの場合はモックデータを返す
+      const token = localStorage.getItem('accessToken');
+      console.log('SensorDeviceList fetchSubstrateBatches - NODE_ENV:', process.env.NODE_ENV, 'token:', token);
+      
+      // Always use demo mode in development or if using demo token
+      if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+        console.log('SensorDeviceList: Using demo mode for substrate batches');
+        const mockBatches = [
+          {
+            id: 'batch1',
+            farm_id: 'farm1',
+            name: 'バッチ1',
+            description: 'テスト用基質バッチ1',
+            total_weight: 100,
+            weight_unit: 'kg',
+            batch_number: 'B001',
+            location: 'エリアA',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'batch2',
+            farm_id: 'farm1',
+            name: 'バッチ2',
+            description: 'テスト用基質バッチ2',
+            total_weight: 150,
+            weight_unit: 'kg',
+            batch_number: 'B002',
+            location: 'エリアB',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ];
+        
+        setSubstrateBatches(mockBatches);
+        return;
+      }
+      
+      const response = await axios.get('http://localhost:8000/substrate/batches?farm_id=farm1');
       setSubstrateBatches(response.data);
     } catch (error) {
       console.error('基質バッチの取得に失敗しました', error);
@@ -101,7 +194,22 @@ const SensorDeviceList = () => {
     
     setLoading(true);
     try {
-      await axios.delete(`http://localhost:8000/sensors/devices/${deviceToDelete.id}`);
+      // デモモードの場合はモック処理
+      const token = localStorage.getItem('accessToken');
+      if (process.env.NODE_ENV === 'development' || token === 'demo-token') {
+        // 削除成功後、デバイス一覧を更新
+        setDevices(devices.filter(device => device.id !== deviceToDelete.id));
+        
+        setSnackbarMessage('センサーデバイスを削除しました。（デモモード）');
+        setSnackbarSeverity('success');
+        setOpenSnackbar(true);
+        setLoading(false);
+        setOpenDeleteDialog(false);
+        setDeviceToDelete(null);
+        return;
+      }
+      
+      await axios.delete(`http://localhost:8000/sensors/devices/${deviceToDelete.device_id}?farm_id=farm1`);
       
       // 削除成功後、デバイス一覧を更新
       setDevices(devices.filter(device => device.id !== deviceToDelete.id));
@@ -148,7 +256,7 @@ const SensorDeviceList = () => {
 
   // 基質バッチ名を取得
   const getBatchName = (batchId) => {
-    if (!batchId) return '-';
+    if (!batchId) return '未設定';
     const batch = substrateBatches.find(b => b.id === batchId);
     return batch ? (batch.name || batch.batch_number || batch.id) : batchId;
   };
@@ -223,12 +331,12 @@ const SensorDeviceList = () => {
                 <TableRow key={device.id}>
                   <TableCell>{device.device_id}</TableCell>
                   <TableCell>{device.device_type}</TableCell>
-                  <TableCell>{device.name || '-'}</TableCell>
-                  <TableCell>{device.location || '-'}</TableCell>
+                  <TableCell>{device.name || '名称未設定'}</TableCell>
+                  <TableCell>{device.location || '場所未設定'}</TableCell>
                   <TableCell>
                     {device.x_position !== null && device.y_position !== null && device.z_position !== null
                       ? `(${device.x_position}, ${device.y_position}, ${device.z_position})`
-                      : '-'}
+                      : '未設定'}
                   </TableCell>
                   <TableCell>
                     <Chip 
@@ -244,7 +352,7 @@ const SensorDeviceList = () => {
                         {getBatchName(device.substrate_batch_id)}
                       </Box>
                     ) : (
-                      '-'
+                      '未接続'
                     )}
                   </TableCell>
                   <TableCell>

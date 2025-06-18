@@ -125,6 +125,33 @@ const SensorReadingsList = () => {
     setLoading(true);
     setError(null);
     try {
+      // デモモードの場合はモックデータを返す
+      const token = localStorage.getItem('accessToken');
+      if (process.env.NODE_ENV === 'development' && token === 'demo-token') {
+        // モックデータを生成
+        const mockReadings = Array.from({ length: Math.min(limit, 50) }, (_, index) => ({
+          id: `reading_${index + 1}`,
+          farm_id: farmId || 'farm1',
+          device_id: `device_${(index % 5) + 1}`,
+          device_type: deviceType || 'temperature_sensor',
+          timestamp: new Date(Date.now() - index * 300000).toISOString(), // 5分間隔
+          measurement_type: measurementType || 'temperature',
+          value: 20 + Math.random() * 15, // 20-35度の範囲
+          unit: '°C',
+          location: location || `Location_${(index % 3) + 1}`,
+          substrate_batch_id: null,
+          metadata: null
+        }));
+        
+        setReadings(mockReadings);
+        setLastUpdated(new Date());
+        setSnackbarMessage(`${mockReadings.length}件のセンサーデータを取得しました。（デモデータ）`);
+        setSnackbarSeverity('success');
+        setOpenSnackbar(true);
+        setLoading(false);
+        return;
+      }
+      
       // クエリパラメータの構築
       const params = new URLSearchParams();
       if (farmId) params.append('farm_id', farmId);
@@ -486,7 +513,7 @@ const SensorReadingsList = () => {
                     <TableCell>{reading.measurement_type}</TableCell>
                     <TableCell>{reading.value}</TableCell>
                     <TableCell>{reading.unit}</TableCell>
-                    <TableCell>{reading.location || '-'}</TableCell>
+                    <TableCell>{reading.location || '場所未設定'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
