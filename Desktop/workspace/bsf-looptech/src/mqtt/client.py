@@ -87,19 +87,32 @@ def create_mqtt_client():
     # Configure TLS if enabled
     if settings.MQTT_TLS_ENABLED:
         try:
+            # TLS configuration with absolute path resolution
+            ca_certs_path = settings.MQTT_CA_CERTS
+            if ca_certs_path and not os.path.isabs(ca_certs_path):
+                # Convert relative path to absolute path from project root
+                ca_certs_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ca_certs_path)
+            
             client.tls_set(
-                ca_certs=settings.MQTT_CA_CERTS,
-                certfile=settings.MQTT_CLIENT_CERT,
-                keyfile=settings.MQTT_CLIENT_KEY,
+                ca_certs=ca_certs_path,
+                certfile=settings.MQTT_CLIENT_CERT if settings.MQTT_CLIENT_CERT else None,
+                keyfile=settings.MQTT_CLIENT_KEY if settings.MQTT_CLIENT_KEY else None,
                 cert_reqs=ssl.CERT_REQUIRED,
-                tls_version=ssl.PROTOCOL_TLSv1_2 # Adjust TLS version if needed
+                tls_version=ssl.PROTOCOL_TLSv1_2
             )
-            # For self-signed certificates, you might need:
-            # client.tls_insecure_set(True) 
-            logger.info("TLS enabled for MQTT connection.")
+            
+            # For self-signed certificates in development environment
+            if os.environ.get('MQTT_DEV_MODE', 'False').lower() == 'true':
+                client.tls_insecure_set(True)
+                logger.warning("TLS insecure mode enabled for development (self-signed certificates)")
+            
+            logger.info(f"TLS enabled for MQTT connection with CA: {ca_certs_path}")
         except Exception as e:
             logger.error(f"Failed to configure TLS: {e}")
-            # Decide how to handle TLS configuration errors (e.g., exit or try non-TLS)
+            # Try fallback to non-TLS connection in development
+            if hasattr(settings, 'MQTT_TLS_ENABLED_FALLBACK') and settings.MQTT_TLS_ENABLED_FALLBACK is False:
+                logger.warning("Falling back to non-TLS MQTT connection")
+                return client  # Return client without TLS
             return None
 
     return client

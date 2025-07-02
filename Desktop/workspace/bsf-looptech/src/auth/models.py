@@ -182,7 +182,7 @@ class LoginAttempt(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     
     # Additional context
-    metadata = Column(JSON)  # Additional context like geolocation, etc.
+    request_metadata = Column(JSON)  # Additional context like geolocation, etc.
     
     # Relationships
     user = relationship("User")

@@ -5,7 +5,7 @@ Handles relational data including users, sensor devices, substrate management.
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, Text, ForeignKey, JSON, text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Optional
@@ -35,21 +35,6 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
-
-
-class User(Base):
-    """User model for authentication and authorization."""
-    __tablename__ = "users"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    username = Column(String(50), unique=True, nullable=False, index=True)
-    email = Column(String(100), unique=True, nullable=False, index=True)
-    full_name = Column(String(100), nullable=True)
-    hashed_password = Column(String(255), nullable=False)
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class SensorDevice(Base):
@@ -246,7 +231,7 @@ class AnomalyDetection(Base):
     
     # Additional data
     sensor_data = Column(JSON, nullable=True)  # Related sensor data
-    metadata = Column(JSON, nullable=True)  # Additional metadata
+    detection_metadata = Column(JSON, nullable=True)  # Additional metadata
     
     # Relationship
     rule = relationship("AnomalyRule", backref="detections")
@@ -292,7 +277,7 @@ async def check_database_health() -> bool:
     """Check if database is accessible."""
     try:
         async with AsyncSessionLocal() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
         return True
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
