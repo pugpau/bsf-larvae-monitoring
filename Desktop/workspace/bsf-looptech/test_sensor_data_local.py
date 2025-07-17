@@ -4,7 +4,6 @@ Test script to create sample sensor data locally.
 
 import json
 import random
-import time
 from datetime import datetime, timedelta
 
 # Output file

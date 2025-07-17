@@ -2,12 +2,13 @@
 Custom exceptions for database operations.
 Provides specific error types for better error handling and logging.
 """
+from typing import Optional
 
 
 class DatabaseError(Exception):
     """Base exception for database-related errors."""
     
-    def __init__(self, message: str, original_error: Exception = None):
+    def __init__(self, message: str, original_error: Optional[Exception] = None):
         self.message = message
         self.original_error = original_error
         super().__init__(self.message)
