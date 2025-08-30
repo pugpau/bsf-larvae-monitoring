@@ -234,7 +234,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         Permission.DATA_VIEW, Permission.DATA_EXPORT, Permission.DATA_DELETE,
         Permission.ALERT_VIEW, Permission.ALERT_MANAGE, Permission.ALERT_CONFIG,
         Permission.USER_VIEW, Permission.USER_EDIT, Permission.USER_DELETE,
-        Permission.SYSTEM_CONFIG, Permission.SYSTEM_LOGS, Permission.SYSTEM_BACKUP
+        Permission.SYSTEM_CONFIG, Permission.SYSTEM_LOGS, Permission.SYSTEM_BACKUP,
+        Permission.VIEW_ANALYTICS, Permission.MANAGE_ANALYTICS
     ],
     UserRole.MANAGER: [
         # Farm and device management, data access, alert management
@@ -242,20 +243,23 @@ DEFAULT_ROLE_PERMISSIONS = {
         Permission.DEVICE_VIEW, Permission.DEVICE_EDIT, Permission.DEVICE_CONTROL,
         Permission.DATA_VIEW, Permission.DATA_EXPORT,
         Permission.ALERT_VIEW, Permission.ALERT_MANAGE, Permission.ALERT_CONFIG,
-        Permission.USER_VIEW
+        Permission.USER_VIEW,
+        Permission.VIEW_ANALYTICS, Permission.MANAGE_ANALYTICS
     ],
     UserRole.OPERATOR: [
         # Device operation, data viewing, basic alert management
         Permission.FARM_VIEW,
         Permission.DEVICE_VIEW, Permission.DEVICE_CONTROL,
         Permission.DATA_VIEW,
-        Permission.ALERT_VIEW, Permission.ALERT_MANAGE
+        Permission.ALERT_VIEW, Permission.ALERT_MANAGE,
+        Permission.VIEW_ANALYTICS
     ],
     UserRole.VIEWER: [
         # Read-only access
         Permission.FARM_VIEW,
         Permission.DEVICE_VIEW,
         Permission.DATA_VIEW,
-        Permission.ALERT_VIEW
+        Permission.ALERT_VIEW,
+        Permission.VIEW_ANALYTICS
     ]
 }

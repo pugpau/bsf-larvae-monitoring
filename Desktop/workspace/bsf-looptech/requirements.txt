@@ -20,5 +20,6 @@ psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
+email-validator
 # Prometheus client for monitoring (optional, add later if needed)
 # prometheus-fastapi-instrumentator

@@ -137,12 +137,35 @@ class AuthenticationService:
             
             logger.info(f"User authenticated successfully: {username}")
             
+            # Convert user to dict for serialization
+            user_dict = {
+                "id": str(authenticated_user.id),
+                "username": authenticated_user.username,
+                "email": authenticated_user.email,
+                "full_name": authenticated_user.full_name,
+                "role": authenticated_user.role,
+                "is_active": authenticated_user.is_active,
+                "is_verified": authenticated_user.is_verified,
+                "is_superuser": authenticated_user.is_superuser,
+                "created_at": authenticated_user.created_at,
+                "updated_at": authenticated_user.updated_at,
+                "last_login": authenticated_user.last_login,
+                "force_password_change": authenticated_user.force_password_change,
+                "failed_login_attempts": authenticated_user.failed_login_attempts,
+                "locked_until": authenticated_user.locked_until,
+                "preferences": authenticated_user.preferences,
+                "phone": authenticated_user.phone,
+                "department": authenticated_user.department,
+                "position": authenticated_user.position,
+                "location": authenticated_user.location
+            }
+            
             return {
                 "access_token": access_token,
                 "refresh_token": refresh_token,
                 "token_type": "bearer",
                 "expires_in": int(access_token_expires.total_seconds()),
-                "user": authenticated_user
+                "user": user_dict
             }, None
             
         except Exception as e:

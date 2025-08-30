@@ -4,10 +4,7 @@
  */
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import axios from 'axios';
-
-// Configure axios defaults
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import axios from '../utils/axiosConfig';
 
 // Create Auth Context
 const AuthContext = createContext();
@@ -100,7 +97,7 @@ export const AuthProvider = ({ children }) => {
         password
       });
 
-      const { access_token, refresh_token, token_type } = response.data;
+      const { access_token, refresh_token, token_type, user } = response.data;
 
       // Store tokens
       localStorage.setItem('accessToken', access_token);
@@ -109,9 +106,8 @@ export const AuthProvider = ({ children }) => {
       // Set auth header
       axios.defaults.headers.common['Authorization'] = `${token_type} ${access_token}`;
 
-      // Get user info
-      const userResponse = await axios.get('/auth/me');
-      setUser(userResponse.data);
+      // Set user from login response
+      setUser(user);
 
       return { success: true };
     } catch (err) {

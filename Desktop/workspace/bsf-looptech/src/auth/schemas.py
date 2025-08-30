@@ -5,6 +5,7 @@ Defines request/response models for API endpoints.
 
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
+from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, validator
 from src.auth.models import UserRole, Permission
 
@@ -63,7 +64,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     """Schema for user response."""
-    id: str
+    id: UUID
     role: UserRole
     is_active: bool
     is_verified: bool
@@ -78,6 +79,9 @@ class UserResponse(UserBase):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            UUID: str
+        }
 
 
 class UserListResponse(BaseModel):
@@ -153,7 +157,7 @@ class APIKeyCreate(BaseModel):
 
 class APIKeyResponse(BaseModel):
     """Schema for API key response."""
-    id: str
+    id: UUID
     name: str
     description: Optional[str]
     key_prefix: str
@@ -168,6 +172,9 @@ class APIKeyResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            UUID: str
+        }
 
 
 class APIKeyCreateResponse(APIKeyResponse):
@@ -177,7 +184,7 @@ class APIKeyCreateResponse(APIKeyResponse):
 
 class SessionResponse(BaseModel):
     """Schema for user session response."""
-    id: str
+    id: UUID
     ip_address: Optional[str]
     user_agent: Optional[str]
     device_info: Optional[Dict[str, Any]]
@@ -188,11 +195,14 @@ class SessionResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            UUID: str
+        }
 
 
 class LoginAttemptResponse(BaseModel):
     """Schema for login attempt response."""
-    id: str
+    id: UUID
     username: str
     success: bool
     failure_reason: Optional[str]
@@ -203,6 +213,9 @@ class LoginAttemptResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            UUID: str
+        }
 
 
 class SecurityEventResponse(BaseModel):
@@ -232,6 +245,9 @@ class FarmAccessResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            UUID: str
+        }
 
 
 class PermissionCheck(BaseModel):
@@ -272,6 +288,9 @@ class AuditLogEntry(BaseModel):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            UUID: str
+        }
 
 
 class AuditLogResponse(BaseModel):

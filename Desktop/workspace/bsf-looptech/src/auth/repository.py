@@ -95,6 +95,7 @@ class UserRepository:
         user.last_login = datetime.utcnow()
         user.failed_login_attempts = 0  # Reset failed attempts
         await self.session.commit()
+        await self.session.refresh(user)  # Ensure all fields are loaded
         
         return user
     

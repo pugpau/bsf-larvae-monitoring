@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from src.database.postgresql import get_async_session
 from src.auth.service import AuthenticationService, UserManagementService, APIKeyService, SecurityService
 from src.auth.security import get_current_user, get_current_active_user, require_permission, require_role
@@ -37,23 +38,42 @@ async def login(
     """
     Authenticate user and return JWT tokens.
     """
-    auth_service = AuthenticationService(session)
-    
-    # Get client information
-    ip_address = request.client.host if request.client else "unknown"
-    user_agent = request.headers.get("User-Agent")
-    
-    token_data, error = await auth_service.authenticate_user(
-        login_request, ip_address, user_agent
-    )
-    
-    if error:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error
+    try:
+        # Use the AuthenticationService
+        auth_service = AuthenticationService(session)
+        
+        # Get client information
+        ip_address = request.client.host if request.client else "unknown"
+        user_agent = request.headers.get("User-Agent")
+        
+        # Authenticate user
+        token_data, error = await auth_service.authenticate_user(
+            login_request, ip_address, user_agent
         )
-    
-    return LoginResponse(**token_data)
+        
+        if error:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=error
+            )
+        
+        # Create response following the schema
+        return LoginResponse(
+            access_token=token_data["access_token"],
+            refresh_token=token_data["refresh_token"],
+            token_type=token_data["token_type"],
+            expires_in=token_data["expires_in"],
+            user=UserResponse(**token_data["user"])
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during login"
+        )
 
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
@@ -105,7 +125,7 @@ async def get_current_user_info(
     """
     Get current user information.
     """
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)
 
 
 @router.put("/me", response_model=UserResponse)
@@ -136,7 +156,7 @@ async def update_current_user(
             detail="User not found"
         )
     
-    return UserResponse.from_orm(updated_user)
+    return UserResponse.model_validate(updated_user)
 
 
 @router.post("/change-password")
@@ -244,7 +264,7 @@ async def update_user(
             detail="User not found"
         )
     
-    return UserResponse.from_orm(updated_user)
+    return UserResponse.model_validate(updated_user)
 
 
 @router.delete("/users/{user_id}")

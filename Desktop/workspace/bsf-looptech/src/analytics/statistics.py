@@ -119,6 +119,7 @@ class StatisticalAnalyzer:
     
     def __init__(self):
         self.influx_client = InfluxDBClient()
+        self.influx_client.connect()
     
     async def get_statistical_summary(
         self,

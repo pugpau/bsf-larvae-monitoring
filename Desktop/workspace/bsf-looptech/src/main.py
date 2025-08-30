@@ -7,7 +7,8 @@ from src.utils.logging import setup_logging, get_logger
 from src.api.routes import substrate, sensors, websocket, auth, analytics
 from src.mqtt.client import connect_mqtt
 from src.database.influxdb import InfluxDBClient
-from src.auth.middleware import AuthenticationMiddleware, RateLimitMiddleware, CORSSecurityMiddleware
+from src.auth.middleware import AuthenticationMiddleware, RateLimitMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables from .env file
 load_dotenv()
@@ -112,13 +113,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add security middlewares
+# Add CORS middleware
 app.add_middleware(
-    CORSSecurityMiddleware,
-    allowed_origins=["http://localhost:3000"],
-    allowed_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowed_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
-    allow_credentials=True
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Add rate limiting
