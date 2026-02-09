@@ -18,7 +18,7 @@ from src.database.postgresql import (
 )
 from src.sensors.models import (
     SensorDevice, SensorAlert, SensorThreshold,
-    SensorDeviceCreate, SensorThresholdCreate,
+    SensorDeviceCreate, SensorDeviceUpdate, SensorThresholdCreate,
     SensorDeviceResponse, SensorThresholdResponse
 )
 
@@ -120,7 +120,7 @@ class SensorDeviceRepository:
             query = select(SensorDeviceDB).options(
                 selectinload(SensorDeviceDB.substrate_batch)
             )
-            
+
             if farm_id:
                 query = query.where(SensorDeviceDB.farm_id == farm_id)
             if device_type:
@@ -131,25 +131,81 @@ class SensorDeviceRepository:
                 query = query.where(SensorDeviceDB.location == location)
             if substrate_batch_id:
                 query = query.where(SensorDeviceDB.substrate_batch_id == substrate_batch_id)
-            
+
             query = query.order_by(SensorDeviceDB.created_at.desc())
-            
+
             # Execute query
             result = await self.session.execute(query)
             db_devices = result.scalars().all()
-            
+
             # Convert to response models
             devices = []
             for db_device in db_devices:
                 response = await self._to_sensor_device_response(db_device)
                 if response:
                     devices.append(response)
-            
+
             return devices
-            
+
         except Exception as e:
             logger.error(f"Error getting sensor devices: {e}")
             return []
+
+    async def get_device_status_summary(
+        self,
+        farm_id: Optional[str] = None
+    ) -> Dict[str, int]:
+        """Get summary of device statuses (online, offline, error counts)."""
+        try:
+            from sqlalchemy import func
+            from datetime import timedelta
+
+            # Build base query - exclude inactive devices
+            query = select(SensorDeviceDB).where(
+                SensorDeviceDB.status != 'inactive'
+            )
+
+            if farm_id:
+                query = query.where(SensorDeviceDB.farm_id == farm_id)
+
+            # Execute query
+            result = await self.session.execute(query)
+            db_devices = result.scalars().all()
+
+            # Count devices by status
+            # A device is considered "online" if last_seen is within 5 minutes
+            # A device is "offline" if last_seen is older than 5 minutes or null
+            # A device is "error" if status is 'error'
+            online_threshold = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+            online_count = 0
+            offline_count = 0
+            error_count = 0
+
+            for device in db_devices:
+                device_status = getattr(device, 'status', 'active')
+                last_seen = getattr(device, 'last_seen', None)
+                is_online = getattr(device, 'is_online', False)
+
+                if device_status == 'error':
+                    error_count += 1
+                elif is_online and last_seen and last_seen.replace(tzinfo=timezone.utc) > online_threshold:
+                    online_count += 1
+                else:
+                    offline_count += 1
+
+            total = len(db_devices)
+
+            return {
+                'online': online_count,
+                'offline': offline_count,
+                'error': error_count,
+                'total': total
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting device status summary: {e}")
+            return {'online': 0, 'offline': 0, 'error': 0, 'total': 0}
     
     async def update_sensor_device(self, device_id: str, device_data: SensorDeviceCreate) -> Optional[SensorDeviceResponse]:
         """Update a sensor device."""
@@ -174,7 +230,7 @@ class SensorDeviceRepository:
             setattr(db_device, 'position_z', device_data.z_position)
             setattr(db_device, 'status', getattr(device_data, 'status', 'active'))
             setattr(db_device, 'substrate_batch_id', device_data.substrate_batch_id)
-            setattr(db_device, 'updated_at', datetime.now(timezone.utc))
+            setattr(db_device, 'updated_at', datetime.utcnow())
             
             await self.session.commit()
             await self.session.refresh(db_device)
@@ -188,6 +244,50 @@ class SensorDeviceRepository:
             logger.error(f"Error updating sensor device {device_id}: {e}")
             return None
     
+    async def partial_update_sensor_device(self, device_id: str, update_data: SensorDeviceUpdate) -> Optional[SensorDeviceResponse]:
+        """Partially update a sensor device with only provided fields."""
+        try:
+            # Get existing device
+            result = await self.session.execute(
+                select(SensorDeviceDB).where(SensorDeviceDB.device_id == device_id)
+            )
+            db_device = result.scalar_one_or_none()
+
+            if not db_device:
+                return None
+
+            # Update only provided fields
+            if update_data.name is not None:
+                setattr(db_device, 'name', update_data.name)
+            if update_data.description is not None:
+                setattr(db_device, 'description', update_data.description)
+            if update_data.location is not None:
+                setattr(db_device, 'location', update_data.location)
+            if update_data.x_position is not None:
+                setattr(db_device, 'position_x', update_data.x_position)
+            if update_data.y_position is not None:
+                setattr(db_device, 'position_y', update_data.y_position)
+            if update_data.z_position is not None:
+                setattr(db_device, 'position_z', update_data.z_position)
+            if update_data.status is not None:
+                setattr(db_device, 'status', update_data.status)
+            # Note: metadata column doesn't exist in SensorDevice model
+            # Metadata support would require adding a JSON column to the model
+
+            setattr(db_device, 'updated_at', datetime.utcnow())
+
+            await self.session.commit()
+            await self.session.refresh(db_device)
+
+            logger.info(f"Partially updated sensor device: {device_id}")
+
+            return await self._to_sensor_device_response(db_device)
+
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error partially updating sensor device {device_id}: {e}")
+            return None
+
     async def update_device_last_seen(self, device_id: str, timestamp: datetime) -> bool:
         """Update the last_seen timestamp and set device as online."""
         try:
@@ -198,7 +298,7 @@ class SensorDeviceRepository:
                 .values(
                     last_seen=timestamp,
                     is_online=True,
-                    updated_at=datetime.now(timezone.utc)
+                    updated_at=datetime.utcnow()
                 )
             )
             await self.session.commit()
@@ -327,7 +427,7 @@ class SensorDeviceRepository:
             setattr(db_rule, 'measurement_type', rule_data.measurement_type)
             setattr(db_rule, 'min_threshold', rule_data.low_threshold)
             setattr(db_rule, 'max_threshold', rule_data.high_threshold)
-            setattr(db_rule, 'updated_at', datetime.now(timezone.utc))
+            setattr(db_rule, 'updated_at', datetime.utcnow())
             
             await self.session.commit()
             await self.session.refresh(db_rule)
@@ -363,6 +463,26 @@ class SensorDeviceRepository:
     async def _to_sensor_device_response(self, db_device: SensorDeviceDB) -> Optional[SensorDeviceResponse]:
         """Convert database model to response model."""
         try:
+            from datetime import timedelta
+
+            # Calculate display status based on last_seen and is_online
+            db_status = getattr(db_device, 'status', 'active')
+            last_seen = getattr(db_device, 'last_seen', None)
+            is_online = getattr(db_device, 'is_online', False)
+
+            # Determine display status
+            if db_status == 'inactive':
+                display_status = 'inactive'
+            elif db_status == 'error':
+                display_status = 'error'
+            else:
+                # For active devices, check if they're online based on last_seen
+                online_threshold = datetime.now(timezone.utc) - timedelta(minutes=5)
+                if is_online and last_seen and last_seen.replace(tzinfo=timezone.utc) > online_threshold:
+                    display_status = 'online'
+                else:
+                    display_status = 'offline'
+
             return SensorDeviceResponse(
                 id=str(getattr(db_device, 'id')),
                 device_id=getattr(db_device, 'device_id'),
@@ -374,7 +494,7 @@ class SensorDeviceRepository:
                 x_position=getattr(db_device, 'position_x'),
                 y_position=getattr(db_device, 'position_y'),
                 z_position=getattr(db_device, 'position_z'),
-                status=getattr(db_device, 'status'),
+                status=display_status,  # Use computed display status
                 last_seen=getattr(db_device, 'last_seen'),
                 substrate_batch_id=str(getattr(db_device, 'substrate_batch_id')) if getattr(db_device, 'substrate_batch_id') else None,
                 created_at=getattr(db_device, 'created_at'),

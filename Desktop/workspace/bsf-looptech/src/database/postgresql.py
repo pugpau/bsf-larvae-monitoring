@@ -5,7 +5,7 @@ Handles relational data including users, sensor devices, substrate management.
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, Text, ForeignKey, JSON, text
+from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, Text, ForeignKey, JSON, text, Numeric, Index
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Optional
@@ -74,17 +74,22 @@ class SubstrateType(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(100), nullable=False, unique=True, index=True)
-    category = Column(String(50), nullable=False)  # sewage_sludge, pig_manure, chicken_manure, sawdust, other
+    category = Column(String(50), nullable=False)  # sewage_sludge, pig_manure, chicken_manure, sawdust, solidifier, elution_suppressor, other
     description = Column(Text, nullable=True)
-    
+
+    # Extended material information (Rev.2)
+    material_category = Column(String(50), nullable=True)  # raw_material, additive, solidifier, elution_suppressor
+    supplier = Column(String(200), nullable=True)
+    unit_cost = Column(Numeric(12, 2), nullable=True)  # cost per unit (e.g., per kg)
+
     # Custom attributes stored as JSON (for flexibility)
     # This will be handled in the repository layer with JSON serialization
     custom_attributes = Column(Text, nullable=True)  # JSON string
-    
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     batch_components = relationship("SubstrateBatchComponent", back_populates="substrate_type")
 
@@ -237,6 +242,183 @@ class AnomalyDetection(Base):
     rule = relationship("AnomalyRule", backref="detections")
 
 
+# ============================================================
+# Rev.2 Tables: Quality, Process, Recipe, Audit
+# ============================================================
+
+
+class QualityTestItem(Base):
+    """Quality test item master - defines what can be tested (Cd, Pb, As, F, Cr6+, moisture, etc.)."""
+    __tablename__ = "quality_test_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, unique=True, index=True)  # e.g. "Cd", "Pb", "含水率"
+    display_name = Column(String(200), nullable=True)  # e.g. "カドミウム", "鉛"
+    unit = Column(String(30), nullable=False)  # mg/L, mg/kg, %
+    regulatory_limit = Column(Float, nullable=True)  # legal limit value
+    warning_threshold = Column(Float, nullable=True)  # internal warning value
+    test_method = Column(String(200), nullable=True)  # e.g. "JIS K 0102"
+    category = Column(String(50), nullable=False, default="heavy_metal")  # heavy_metal, physical, chemical
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    test_results = relationship("QualityTestResult", back_populates="test_item")
+
+
+class QualityTest(Base):
+    """Quality test record - a single test session for a batch/process."""
+    __tablename__ = "quality_tests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    batch_id = Column(UUID(as_uuid=True), ForeignKey("substrate_batches.id"), nullable=True, index=True)
+    process_record_id = Column(UUID(as_uuid=True), ForeignKey("process_records.id"), nullable=True, index=True)
+
+    test_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    test_type = Column(String(30), nullable=False)  # receiving, in_process, final_product
+    sample_id = Column(String(100), nullable=True)  # physical sample identifier
+    tested_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+
+    status = Column(String(20), nullable=False, default="draft")  # draft, submitted, approved, rejected
+    rejection_reason = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    batch = relationship("SubstrateBatch", backref="quality_tests")
+    process_record = relationship("ProcessRecord", back_populates="quality_tests")
+    tester = relationship("User", foreign_keys=[tested_by])
+    approver = relationship("User", foreign_keys=[approved_by])
+    results = relationship("QualityTestResult", back_populates="quality_test", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_quality_tests_date_type", "test_date", "test_type"),
+    )
+
+
+class QualityTestResult(Base):
+    """Individual test result for one item within a quality test."""
+    __tablename__ = "quality_test_results"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quality_test_id = Column(UUID(as_uuid=True), ForeignKey("quality_tests.id"), nullable=False, index=True)
+    quality_test_item_id = Column(UUID(as_uuid=True), ForeignKey("quality_test_items.id"), nullable=False, index=True)
+
+    measured_value = Column(Float, nullable=False)
+    is_within_limit = Column(Boolean, nullable=True)  # auto-computed against regulatory_limit
+    judgment = Column(String(20), nullable=True)  # pass, fail, warning
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    quality_test = relationship("QualityTest", back_populates="results")
+    test_item = relationship("QualityTestItem", back_populates="test_results")
+
+
+class RecipeTemplate(Base):
+    """Recipe template for material blending formulations."""
+    __tablename__ = "recipe_templates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(200), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    description = Column(Text, nullable=True)
+    target_product_type = Column(String(100), nullable=True)  # e.g. "solidified_sludge", "compost"
+
+    # JSON fields for flexible configuration
+    components = Column(JSON, nullable=True)  # [{substrate_type_id, ratio_min, ratio_max, ratio_default}]
+    process_parameters = Column(JSON, nullable=True)  # {drying_temp, drying_time, mixing_speed, ...}
+    quality_targets = Column(JSON, nullable=True)  # {Cd: {max: 0.45}, Pb: {max: 0.1}, ...}
+    constraints = Column(JSON, nullable=True)  # {total_weight_min, total_weight_max, ...}
+
+    status = Column(String(20), nullable=False, default="draft")  # draft, active, deprecated
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    creator = relationship("User", foreign_keys=[created_by])
+    process_records = relationship("ProcessRecord", back_populates="recipe_template")
+
+    __table_args__ = (
+        Index("ix_recipe_templates_name_version", "name", "version", unique=True),
+    )
+
+
+class ProcessRecord(Base):
+    """Process record for tracking manufacturing steps."""
+    __tablename__ = "process_records"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lot_number = Column(String(50), nullable=False, unique=True, index=True)  # LOT-YYYYMMDD-NNN
+    recipe_template_id = Column(UUID(as_uuid=True), ForeignKey("recipe_templates.id"), nullable=True, index=True)
+    batch_id = Column(UUID(as_uuid=True), ForeignKey("substrate_batches.id"), nullable=True, index=True)
+
+    process_type = Column(String(30), nullable=False)  # mixing, drying, solidifying, packaging
+    status = Column(String(20), nullable=False, default="planned")  # planned, in_progress, completed, aborted
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    operator_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    # Material tracking
+    input_materials = Column(JSON, nullable=True)  # [{substrate_type_id, weight, ...}]
+    output_weight = Column(Float, nullable=True)
+
+    # Process parameters recorded
+    actual_parameters = Column(JSON, nullable=True)  # {temperature, duration, ...}
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    recipe_template = relationship("RecipeTemplate", back_populates="process_records")
+    batch = relationship("SubstrateBatch", backref="process_records")
+    operator = relationship("User", foreign_keys=[operator_id])
+    quality_tests = relationship("QualityTest", back_populates="process_record")
+
+    __table_args__ = (
+        Index("ix_process_records_type_status", "process_type", "status"),
+    )
+
+
+class AuditLog(Base):
+    """Audit log for tracking all data operations (Rev.2 compliance)."""
+    __tablename__ = "audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    username = Column(String(50), nullable=True)
+
+    action = Column(String(20), nullable=False)  # CREATE, UPDATE, DELETE, APPROVE, REJECT, LOGIN, EXPORT
+    resource_type = Column(String(50), nullable=False, index=True)  # quality_test, process_record, recipe, etc.
+    resource_id = Column(String(50), nullable=True)
+
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+    changes_summary = Column(Text, nullable=True)  # human-readable summary
+
+    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
+    user_agent = Column(Text, nullable=True)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        Index("ix_audit_logs_resource", "resource_type", "resource_id"),
+        Index("ix_audit_logs_user_time", "user_id", "timestamp"),
+    )
+
+
 # Database dependency for FastAPI
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection."""
@@ -257,7 +439,8 @@ async def init_database():
     try:
         # Import all models to ensure they're registered with Base
         from src.auth.models import User, UserSession, LoginAttempt, APIKey
-        
+        # Rev.2 models are defined in this file (QualityTestItem, QualityTest, etc.)
+
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created successfully")

@@ -69,6 +69,7 @@ class ModelMetrics(BaseModel):
     cross_val_scores: Optional[List[float]] = None
     confusion_matrix: Optional[List[List[int]]] = None
     classification_report: Optional[Dict[str, Any]] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelConfig(BaseModel):

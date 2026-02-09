@@ -53,12 +53,22 @@ def on_message(client, userdata, msg):
         logger.debug(f"Decoded payload: {payload_dict}")
         
         # Real-time processing: Stream data to WebSocket clients
-        asyncio.create_task(sensor_streamer.process_mqtt_message(msg.topic, payload_dict))
+        # Try to get the running event loop, or create one if needed
+        try:
+            loop = asyncio.get_running_loop()
+            # Schedule the coroutine in the existing event loop
+            asyncio.run_coroutine_threadsafe(
+                sensor_streamer.process_mqtt_message(msg.topic, payload_dict),
+                loop
+            )
+        except RuntimeError:
+            # No running event loop, skip real-time processing
+            logger.warning("No running event loop for real-time processing, skipping WebSocket streaming")
         
         # Alert processing would be integrated here in the future
         # Currently handled through sensor_streamer which includes alert evaluation
         
-        # Process message using sensor service
+        # Process message using sensor service (synchronous)
         success = sensor_service.process_mqtt_message(msg.topic, payload_dict)
         if success:
             logger.info(f"Successfully processed message from topic {msg.topic}")
@@ -98,7 +108,7 @@ def create_mqtt_client():
                 certfile=settings.MQTT_CLIENT_CERT if settings.MQTT_CLIENT_CERT else None,
                 keyfile=settings.MQTT_CLIENT_KEY if settings.MQTT_CLIENT_KEY else None,
                 cert_reqs=ssl.CERT_REQUIRED,
-                tls_version=ssl.PROTOCOL_TLSv1_2
+                tls_version=ssl.PROTOCOL_TLS  # Auto-negotiates highest version
             )
             
             # For self-signed certificates in development environment

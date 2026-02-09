@@ -260,7 +260,13 @@ class AnomalyDetectionRepository:
         """Get anomalies with filters."""
         try:
             query = select(AnomalyDetectionDB)
-            
+
+            # Convert timezone-aware datetime to naive (PostgreSQL uses TIMESTAMP WITHOUT TIME ZONE)
+            if start_time and start_time.tzinfo is not None:
+                start_time = start_time.replace(tzinfo=None)
+            if end_time and end_time.tzinfo is not None:
+                end_time = end_time.replace(tzinfo=None)
+
             # Apply filters
             filters = []
             if status:

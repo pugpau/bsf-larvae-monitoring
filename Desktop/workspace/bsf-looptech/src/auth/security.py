@@ -24,11 +24,15 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
+# Development mode - skip authentication (set SKIP_AUTH=true)
+SKIP_AUTH = os.getenv("SKIP_AUTH", "false").lower() == "true"
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # HTTP Bearer token security
-security = HTTPBearer()
+# auto_error=False allows requests without token when SKIP_AUTH is enabled
+security = HTTPBearer(auto_error=False)
 
 
 class SecurityConfig:
@@ -174,6 +178,23 @@ def verify_api_key(api_key: str, hashed_key: str) -> bool:
     return verify_password(api_key, hashed_key)
 
 
+def _create_dev_user() -> User:
+    """Create a development user for SKIP_AUTH mode."""
+    from uuid import uuid4
+    dev_user = User(
+        id=uuid4(),
+        username="dev_user",
+        email="dev@localhost",
+        hashed_password="",
+        full_name="Development User",
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True
+    )
+    return dev_user
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_async_session)
@@ -182,40 +203,45 @@ async def get_current_user(
     Get current authenticated user from JWT token.
     Used as FastAPI dependency.
     """
+    # Development mode - skip authentication
+    if SKIP_AUTH:
+        logger.warning("SKIP_AUTH is enabled - authentication bypassed (development mode only!)")
+        return _create_dev_user()
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     try:
         # Verify token
         payload = verify_token(credentials.credentials, "access")
         if payload is None:
             raise credentials_exception
-        
+
         # Get user ID from token
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-        
+
         # Get user from database
         from src.auth.repository import UserRepository
         user_repo = UserRepository(session)
         user = await user_repo.get_user_by_id(user_id)
-        
+
         if user is None:
             raise credentials_exception
-        
+
         # Check if user is active
         if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Inactive user"
             )
-        
+
         return user
-    
+
     except Exception as e:
         logger.error(f"Authentication error: {e}")
         raise credentials_exception
@@ -245,17 +271,21 @@ def require_permission(permission: Permission):
         current_user: User = Depends(get_current_active_user)
     ) -> User:
         """Check if current user has required permission."""
+        # Development mode - skip permission check
+        if SKIP_AUTH:
+            return current_user
+
         from src.auth.repository import UserRepository
-        
+
         # Check if user has permission
         if not await UserRepository.user_has_permission(current_user, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Not enough permissions. Required: {permission.value}"
             )
-        
+
         return current_user
-    
+
     return permission_checker
 
 

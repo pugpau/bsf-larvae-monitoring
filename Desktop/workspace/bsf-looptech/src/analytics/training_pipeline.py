@@ -20,7 +20,7 @@ from src.analytics.feature_engineering import (
 from src.analytics.ml_models import (
     MLModelService, ModelConfig, ModelType, TaskType, TrainedModel
 )
-from src.analytics.aggregation import DataAggregationService
+from src.analytics.aggregation import DataAggregationService, AggregationWindow
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -102,9 +102,9 @@ class ModelEvaluationReport(BaseModel):
     model_id: str
     model_type: ModelType
     measurement_type: str
-    
-    # 性能メトリクス
-    metrics: Dict[str, float]
+
+    # 性能メトリクス (ModelMetrics.model_dump() の結果を格納)
+    metrics: Dict[str, Any]
     
     # 特徴量重要度
     feature_importance: Optional[Dict[str, float]] = None

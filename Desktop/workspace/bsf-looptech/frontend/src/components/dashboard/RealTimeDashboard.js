@@ -23,6 +23,7 @@ import {
   Tooltip,
   Divider
 } from '@mui/material';
+import DocumentCard from '../ui/DocumentCard';
 import {
   Refresh as RefreshIcon,
   Settings as SettingsIcon,
@@ -240,58 +241,77 @@ const RealTimeDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Dashboard Stats */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
+      {/* Dashboard Stats with Ocean-themed DocumentCards */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="primary">
+          <DocumentCard
+            title="受信メッセージ数"
+            description={`${stats?.messagesReceived || 0} messages`}
+            type="MQTT"
+            typeColor="#1e3c72"
+            backgroundGradient="linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)"
+          >
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Typography variant="h3" sx={{ color: '#1e3c72', fontWeight: 'bold' }}>
                 {stats?.messagesReceived || 0}
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                受信メッセージ数
-              </Typography>
-            </CardContent>
-          </Card>
+            </Box>
+          </DocumentCard>
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="success.main">
+          <DocumentCard
+            title="接続状態"
+            description={isConnected ? '正常に接続されています' : '接続が切断されています'}
+            type="STATUS"
+            typeColor={isConnected ? "#20e3b2" : "#ff6b6b"}
+            backgroundGradient={
+              isConnected 
+                ? "linear-gradient(135deg, #20e3b2 0%, #29f5c6 100%)" 
+                : "linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%)"
+            }
+          >
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Typography variant="h4" sx={{ 
+                color: isConnected ? '#20e3b2' : '#ff6b6b', 
+                fontWeight: 'bold' 
+              }}>
                 {isConnected ? '接続中' : '切断'}
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                接続状態
-              </Typography>
-            </CardContent>
-          </Card>
+            </Box>
+          </DocumentCard>
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="info.main">
+          <DocumentCard
+            title="データポイント数"
+            description="収集されたセンサーデータポイント"
+            type="DATA"
+            typeColor="#2a5298"
+            backgroundGradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+          >
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Typography variant="h3" sx={{ color: '#2a5298', fontWeight: 'bold' }}>
                 {dashboardStats.dataPoints}
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                データポイント数
-              </Typography>
-            </CardContent>
-          </Card>
+            </Box>
+          </DocumentCard>
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="warning.main">
+          <DocumentCard
+            title="稼働時間"
+            description="システムの連続稼働時間"
+            type="TIME"
+            typeColor="#ffeaa7"
+            backgroundGradient="linear-gradient(135deg, #ffeaa7 0%, #ffd89b 100%)"
+          >
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Typography variant="h3" sx={{ color: '#d63031', fontWeight: 'bold' }}>
                 {Math.floor(dashboardStats.uptime / 60)}m
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                稼働時間
-              </Typography>
-            </CardContent>
-          </Card>
+            </Box>
+          </DocumentCard>
         </Grid>
       </Grid>
 

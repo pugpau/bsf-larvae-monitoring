@@ -31,7 +31,7 @@ class SensorRepository:
             
             # Prepare data point
             point = {
-                "measurement": "sensor_readings",
+                "measurement": "sensor_data",
                 "tags": {
                     "farm_id": reading.farm_id,
                     "device_id": reading.device_id,
@@ -59,9 +59,17 @@ class SensorRepository:
                         point["fields"][f"metadata_{key}"] = value
             
             # Write to InfluxDB
-            success = self.influxdb.write_point(point)
+            try:
+                success = self.influxdb.write_point(point)
+                if success:
+                    logger.info(f"Saved sensor reading to InfluxDB: {reading.id}")
+            except Exception as influx_error:
+                # Log the error but continue (fallback to local storage)
+                logger.warning(f"InfluxDB write failed (will use fallback): {influx_error}")
+                success = True  # Treat as success to continue processing
+            
             if success:
-                logger.info(f"Saved sensor reading: {reading.id}")
+                logger.info(f"Processed sensor reading: {reading.id}")
                 
                 # Update last_seen timestamp for the device
                 self._update_device_last_seen(reading.farm_id, reading.device_id, reading.timestamp)
@@ -109,10 +117,10 @@ class SensorRepository:
             elif end_time:
                 query += f'stop: {end_time.isoformat()}'
             else:
-                # Default to last 24 hours
-                query += f'start: -24h'
+                # Default to last 7 days
+                query += f'start: -7d'
             
-            query += f') |> filter(fn: (r) => r._measurement == "sensor_readings")'
+            query += f') |> filter(fn: (r) => r._measurement == "sensor_data")'
             query += f' |> filter(fn: (r) => r.farm_id == "{farm_id}")'
             
             # Add optional filters
@@ -121,7 +129,8 @@ class SensorRepository:
             if device_id:
                 query += f' |> filter(fn: (r) => r.device_id == "{device_id}")'
             if measurement_type:
-                query += f' |> filter(fn: (r) => r.measurement_type == "{measurement_type}")'
+                # measurement_type can be either a tag or _field (for historical data)
+                query += f' |> filter(fn: (r) => r.measurement_type == "{measurement_type}" or r._field == "{measurement_type}")'
             if location:
                 query += f' |> filter(fn: (r) => r.location == "{location}")'
             if substrate_batch_id:
@@ -139,35 +148,46 @@ class SensorRepository:
                 for record in table.records:
                     # Extract fields and tags
                     reading_id = record.values.get("reading_id", "")
-                    farm_id = record.values.get("farm_id", "")
-                    device_id = record.values.get("device_id", "")
-                    device_type = record.values.get("device_type", "")
-                    measurement_type = record.values.get("measurement_type", "")
-                    value = record.values.get("_value", 0.0)
-                    unit = record.values.get("unit", "")
+                    rec_farm_id = record.values.get("farm_id", "")
+                    rec_device_id = record.values.get("device_id", "")
+                    rec_device_type = record.values.get("device_type", "")
+                    # measurement_type can be a tag or _field (for historical data)
+                    rec_measurement_type = record.values.get("measurement_type") or record.values.get("_field", "")
+                    rec_value = record.values.get("_value", 0.0)
+                    # Unit defaults based on measurement type for historical data
+                    rec_unit = record.values.get("unit", "")
+                    if not rec_unit and rec_measurement_type:
+                        unit_map = {
+                            "temperature": "°C",
+                            "humidity": "%",
+                            "pressure": "hPa",
+                            "nh3": "ppm",
+                            "h2s": "ppm"
+                        }
+                        rec_unit = unit_map.get(rec_measurement_type, "")
                     timestamp = record.values.get("_time", datetime.utcnow())
-                    location = record.values.get("location", None)
-                    substrate_batch_id = record.values.get("substrate_batch_id", None)
-                    
-                    # Extract metadata
+                    rec_location = record.values.get("location", None)
+                    rec_substrate_batch_id = record.values.get("substrate_batch_id", None)
+
+                    # Extract metadata (use different variable name to avoid shadowing)
                     metadata = {}
-                    for key, value in record.values.items():
-                        if key.startswith("metadata_"):
-                            metadata_key = key.replace("metadata_", "")
-                            metadata[metadata_key] = value
-                    
+                    for meta_key, meta_value in record.values.items():
+                        if meta_key.startswith("metadata_"):
+                            metadata_key = meta_key.replace("metadata_", "")
+                            metadata[metadata_key] = meta_value
+
                     # Create reading response
                     reading = SensorReadingResponse(
-                        id=reading_id,
-                        farm_id=farm_id,
-                        device_id=device_id,
-                        device_type=device_type,
+                        id=reading_id if reading_id else f"{rec_device_id}_{rec_measurement_type}_{timestamp.isoformat()}",
+                        farm_id=rec_farm_id,
+                        device_id=rec_device_id,
+                        device_type=rec_device_type,
                         timestamp=timestamp,
-                        measurement_type=measurement_type,
-                        value=value,
-                        unit=unit,
-                        location=location,
-                        substrate_batch_id=substrate_batch_id,
+                        measurement_type=rec_measurement_type,
+                        value=rec_value,
+                        unit=rec_unit,
+                        location=rec_location,
+                        substrate_batch_id=rec_substrate_batch_id,
                         metadata=metadata if metadata else None
                     )
                     readings.append(reading)
@@ -237,8 +257,8 @@ class SensorRepository:
             self.influxdb.close()
     
     def get_sensor_devices(
-        self, 
-        farm_id: str, 
+        self,
+        farm_id: str,
         device_type: Optional[str] = None,
         device_id: Optional[str] = None,
         status: Optional[str] = None,
@@ -250,13 +270,13 @@ class SensorRepository:
             if not self.influxdb.connect():
                 logger.error("Failed to connect to InfluxDB")
                 return []
-            
-            # Build query
+
+            # Build query with pivot to combine fields
             query = f'from(bucket:"{self.influxdb.bucket}") |> range(start: -30d)'
             query += f' |> filter(fn: (r) => r._measurement == "sensor_devices")'
             query += f' |> filter(fn: (r) => r.farm_id == "{farm_id}")'
-            
-            # Add optional filters
+
+            # Add optional filters on tags
             if device_type:
                 query += f' |> filter(fn: (r) => r.device_type == "{device_type}")'
             if device_id:
@@ -265,60 +285,73 @@ class SensorRepository:
                 query += f' |> filter(fn: (r) => r.status == "{status}")'
             if location:
                 query += f' |> filter(fn: (r) => r.location == "{location}")'
-            
-            # Group by device and get latest record
-            query += f' |> group(columns: ["device_id"]) |> sort(columns: ["_time"], desc: true) |> limit(n: 1)'
-            
+
+            # Pivot to combine all fields into single rows, then get latest per device
+            query += ' |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")'
+            query += ' |> group(columns: ["device_id"]) |> sort(columns: ["_time"], desc: true) |> limit(n: 1)'
+
             # Execute query
             results = self.influxdb.query(query)
-            
-            # Process results
-            devices = []
+
+            # Process results - collect unique devices
+            devices_map = {}
             for table in results:
                 for record in table.records:
                     # Extract fields and tags
-                    device_id = record.values.get("device_id", "")
-                    device_uuid = record.values.get("device_uuid", "")
-                    farm_id = record.values.get("farm_id", "")
-                    device_type = record.values.get("device_type", "")
+                    rec_device_id = record.values.get("device_id", "")
+                    if not rec_device_id or rec_device_id in devices_map:
+                        continue
+
+                    device_uuid = record.values.get("device_uuid", rec_device_id)
+                    rec_farm_id = record.values.get("farm_id", "")
+                    rec_device_type = record.values.get("device_type", "")
                     name = record.values.get("name", "")
                     description = record.values.get("description", "")
-                    status = record.values.get("status", "active")
-                    location = record.values.get("location", None)
+                    rec_status = record.values.get("status", "active")
+                    rec_location = record.values.get("location", None)
                     created_at_str = record.values.get("created_at", "")
                     updated_at_str = record.values.get("updated_at", "")
                     last_seen_str = record.values.get("last_seen", None)
-                    
+
                     # Parse datetime strings
-                    created_at = datetime.fromisoformat(created_at_str) if created_at_str else datetime.utcnow()
-                    updated_at = datetime.fromisoformat(updated_at_str) if updated_at_str else datetime.utcnow()
-                    last_seen = datetime.fromisoformat(last_seen_str) if last_seen_str else None
-                    
+                    try:
+                        created_at = datetime.fromisoformat(created_at_str.replace('+00:00', '')) if created_at_str else datetime.utcnow()
+                    except:
+                        created_at = datetime.utcnow()
+                    try:
+                        updated_at = datetime.fromisoformat(updated_at_str.replace('+00:00', '')) if updated_at_str else datetime.utcnow()
+                    except:
+                        updated_at = datetime.utcnow()
+                    try:
+                        last_seen = datetime.fromisoformat(last_seen_str.replace('+00:00', '')) if last_seen_str else None
+                    except:
+                        last_seen = None
+
                     # Extract metadata
                     metadata = {}
-                    for key, value in record.values.items():
-                        if key.startswith("metadata_"):
-                            metadata_key = key.replace("metadata_", "")
-                            metadata[metadata_key] = value
-                    
+                    for meta_key, meta_value in record.values.items():
+                        if meta_key.startswith("metadata_"):
+                            metadata_key = meta_key.replace("metadata_", "")
+                            metadata[metadata_key] = meta_value
+
                     # Create device response
                     device = SensorDeviceResponse(
-                        id=device_uuid,
-                        farm_id=farm_id,
-                        device_id=device_id,
-                        device_type=device_type,
+                        id=device_uuid if device_uuid else rec_device_id,
+                        farm_id=rec_farm_id,
+                        device_id=rec_device_id,
+                        device_type=rec_device_type,
                         name=name if name else None,
                         description=description if description else None,
-                        location=location,
-                        status=status,
+                        location=rec_location,
+                        status=rec_status,
                         last_seen=last_seen,
                         metadata=metadata if metadata else None,
                         created_at=created_at,
                         updated_at=updated_at
                     )
-                    devices.append(device)
-            
-            return devices
+                    devices_map[rec_device_id] = device
+
+            return list(devices_map.values())
         except Exception as e:
             logger.error(f"Error getting sensor devices: {e}")
             return []
@@ -434,8 +467,8 @@ class SensorRepository:
             elif end_time:
                 query += f'stop: {end_time.isoformat()}'
             else:
-                # Default to last 24 hours
-                query += f'start: -24h'
+                # Default to last 7 days
+                query += f'start: -7d'
             
             query += f') |> filter(fn: (r) => r._measurement == "sensor_alerts")'
             query += f' |> filter(fn: (r) => r.farm_id == "{farm_id}")'

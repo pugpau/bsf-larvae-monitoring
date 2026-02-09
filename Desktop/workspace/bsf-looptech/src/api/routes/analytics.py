@@ -7,8 +7,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 import numpy as np
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel, Field
 
 from src.analytics.models import (
     AnomalyDetectionRule, AnomalyDetection,
@@ -25,6 +26,7 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 from src.database.postgresql import get_async_session
+from src.database.influxdb import InfluxDBClient
 from src.auth.security import require_permission
 from src.auth.models import User, Permission
 
@@ -284,62 +286,140 @@ async def get_anomaly_statistics(
 @router.get("/statistics/dashboard", response_model=Dict[str, Any])
 async def get_dashboard_statistics(
     farm_id: str = Query("farm1", description="Farm ID"),
+    start_time: Optional[str] = Query(None, description="Start time (ISO format)"),
+    end_time: Optional[str] = Query(None, description="End time (ISO format)"),
     current_user: User = Depends(require_permission(Permission.VIEW_ANALYTICS)),
     session: AsyncSession = Depends(get_async_session)
 ):
     """Get comprehensive dashboard statistics."""
     try:
-        # Get basic statistics for last 24 hours
-        end_time = datetime.now(timezone.utc).replace(tzinfo=None)
-        start_time = end_time - timedelta(hours=24)
+        # Parse time parameters or default to last 24 hours
+        if end_time:
+            try:
+                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00')).replace(tzinfo=None)
+            except ValueError:
+                end_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        else:
+            end_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        if start_time:
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00')).replace(tzinfo=None)
+            except ValueError:
+                start_dt = end_dt - timedelta(hours=24)
+        else:
+            start_dt = end_dt - timedelta(hours=24)
+
+        # Reassign for use in the rest of the function
+        start_time = start_dt
+        end_time = end_dt
         
-        # Initialize default statistics
+        # Initialize statistics and trends
         stats = {}
         trends = {}
-        
-        # Create mock data for now (until InfluxDB has data)
-        import random
-        for measurement_type in ["temperature", "humidity", "pressure", "h2s", "nh3"]:
-            # Mock statistics
-            base_value = {
-                "temperature": 25.0,
-                "humidity": 65.0,
-                "pressure": 1013.0,
-                "h2s": 0.5,
-                "nh3": 0.8
-            }[measurement_type]
-            
-            stats[measurement_type] = {
-                "mean": base_value + random.uniform(-2, 2),
-                "median": base_value + random.uniform(-1, 1),
-                "min": base_value - random.uniform(5, 10),
-                "max": base_value + random.uniform(5, 10),
-                "std_dev": random.uniform(1, 3),
-                "trend_direction": random.choice(["stable", "increasing", "decreasing"]),
-                "trend_strength": random.uniform(0.1, 0.9),
-                "data_points": random.randint(100, 1000)
-            }
-            
-            # Mock time series trends
-            points = []
-            current_time = start_time
-            while current_time < end_time:
-                points.append({
-                    "timestamp": current_time.isoformat(),
-                    "value": base_value + random.uniform(-5, 5)
-                })
-                current_time += timedelta(hours=1)
-            
-            trends[measurement_type] = {
-                "points": points,
-                "unit": {
-                    "temperature": "°C",
-                    "humidity": "%",
-                    "pressure": "hPa",
-                    "h2s": "ppm",
-                    "nh3": "ppm"
-                }[measurement_type]
-            }
+
+        # Units for each measurement type
+        units = {
+            "temperature": "°C",
+            "humidity": "%",
+            "pressure": "hPa",
+            "h2s": "ppm",
+            "nh3": "ppm"
+        }
+
+        # Query InfluxDB for real statistics
+        influxdb = InfluxDBClient()
+        try:
+            if not influxdb.connect():
+                logger.warning("Failed to connect to InfluxDB, returning empty statistics")
+            else:
+                for measurement_type in ["temperature", "humidity", "pressure", "h2s", "nh3"]:
+                    # Query for statistics
+                    stats_query = f'''
+                    from(bucket: "{influxdb.bucket}")
+                      |> range(start: {start_time.isoformat()}Z, stop: {end_time.isoformat()}Z)
+                      |> filter(fn: (r) => r._measurement == "sensor_data")
+                      |> filter(fn: (r) => r.measurement_type == "{measurement_type}")
+                      |> filter(fn: (r) => r._field == "value")
+                      |> group()
+                    '''
+
+                    try:
+                        results = influxdb.query(stats_query)
+                        values = []
+                        for table in results:
+                            for record in table.records:
+                                val = record.get_value()
+                                if val is not None and isinstance(val, (int, float)):
+                                    values.append(float(val))
+
+                        if values:
+                            values_arr = np.array(values)
+                            mean_val = float(np.mean(values_arr))
+
+                            # Calculate trend
+                            if len(values) > 10:
+                                first_half = np.mean(values_arr[:len(values)//2])
+                                second_half = np.mean(values_arr[len(values)//2:])
+                                diff = second_half - first_half
+                                if abs(diff) < 0.5:
+                                    trend_direction = "stable"
+                                elif diff > 0:
+                                    trend_direction = "increasing"
+                                else:
+                                    trend_direction = "decreasing"
+                                trend_strength = min(abs(diff) / (abs(mean_val) + 0.01), 1.0)
+                            else:
+                                trend_direction = "stable"
+                                trend_strength = 0.0
+
+                            stats[measurement_type] = {
+                                "mean": mean_val,
+                                "median": float(np.median(values_arr)),
+                                "min": float(np.min(values_arr)),
+                                "max": float(np.max(values_arr)),
+                                "std_dev": float(np.std(values_arr)),
+                                "trend_direction": trend_direction,
+                                "trend_strength": trend_strength,
+                                "data_points": len(values)
+                            }
+                    except Exception as e:
+                        logger.warning(f"Failed to get statistics for {measurement_type}: {e}")
+
+                    # Query for hourly trend data
+                    trend_query = f'''
+                    from(bucket: "{influxdb.bucket}")
+                      |> range(start: {start_time.isoformat()}Z, stop: {end_time.isoformat()}Z)
+                      |> filter(fn: (r) => r._measurement == "sensor_data")
+                      |> filter(fn: (r) => r.measurement_type == "{measurement_type}")
+                      |> filter(fn: (r) => r._field == "value")
+                      |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+                      |> yield(name: "mean")
+                    '''
+
+                    try:
+                        trend_results = influxdb.query(trend_query)
+                        points = []
+                        for table in trend_results:
+                            for record in table.records:
+                                val = record.get_value()
+                                if val is not None:
+                                    points.append({
+                                        "timestamp": record.get_time().isoformat().replace('+00:00', ''),
+                                        "value": float(val)
+                                    })
+
+                        trends[measurement_type] = {
+                            "points": sorted(points, key=lambda x: x["timestamp"]),
+                            "unit": units[measurement_type]
+                        }
+                    except Exception as e:
+                        logger.warning(f"Failed to get trends for {measurement_type}: {e}")
+                        trends[measurement_type] = {"points": [], "unit": units[measurement_type]}
+        except Exception as e:
+            logger.error(f"InfluxDB error: {e}")
+        finally:
+            influxdb.close()
         
         # Get recent anomalies count (with error handling)
         anomaly_stats = {
@@ -364,6 +444,9 @@ async def get_dashboard_statistics(
         except Exception as e:
             logger.warning(f"Failed to get anomaly statistics: {e}")
         
+        # Calculate actual duration
+        duration_hours = (end_time - start_time).total_seconds() / 3600
+
         return {
             "statistics": stats,
             "trends": trends,
@@ -371,7 +454,7 @@ async def get_dashboard_statistics(
             "period": {
                 "start": start_time.isoformat(),
                 "end": end_time.isoformat(),
-                "duration_hours": 24
+                "duration_hours": duration_hours
             },
             "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         }
@@ -1019,6 +1102,11 @@ async def forecast_values(
             ]
         }
         
+    except ValueError as e:
+        # Handle insufficient data or invalid parameter errors gracefully
+        if "Insufficient" in str(e):
+            raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Forecasting failed: {str(e)}")
 
@@ -1139,14 +1227,18 @@ async def get_aggregation_windows(
 
 # Machine Learning Endpoints
 
+class TrainingPipelineRequest(BaseModel):
+    """Request model for ML training pipeline."""
+    measurement_types: List[str] = Field(..., description="List of measurement types to train on")
+    training_period_days: int = Field(30, ge=1, le=365, description="Training period in days")
+    test_split_ratio: float = Field(0.2, ge=0.1, le=0.5, description="Test split ratio")
+    include_anomaly_detection: bool = Field(True, description="Include anomaly detection")
+    farm_id: Optional[str] = Field(None, description="Farm ID filter")
+    device_id: Optional[str] = Field(None, description="Device ID filter")
+
 @router.post("/ml/train-pipeline")
 async def start_training_pipeline(
-    measurement_types: List[str],
-    training_period_days: int = 30,
-    test_split_ratio: float = 0.2,
-    include_anomaly_detection: bool = True,
-    farm_id: Optional[str] = None,
-    device_id: Optional[str] = None,
+    request: TrainingPipelineRequest,
     current_user: User = Depends(require_permission(Permission.MANAGE_ANALYTICS))
 ):
     """Start ML training pipeline."""
@@ -1156,18 +1248,18 @@ async def start_training_pipeline(
     
     try:
         config = TrainingConfig(
-            measurement_types=measurement_types,
-            training_period_days=training_period_days,
-            test_split_ratio=test_split_ratio,
+            measurement_types=request.measurement_types,
+            training_period_days=request.training_period_days,
+            test_split_ratio=request.test_split_ratio,
             feature_types=[FeatureType.STATISTICAL, FeatureType.TEMPORAL, FeatureType.SPECTRAL],
             window_config=WindowConfig(window_size=24, step_size=1),
             scaling_method=ScalingMethod.STANDARD,
             model_types=[ModelType.RANDOM_FOREST_REGRESSOR, ModelType.LINEAR_REGRESSION],
             hyperparameter_tuning=True,
             cross_validation_folds=5,
-            farm_id=farm_id,
-            device_id=device_id,
-            include_anomaly_detection=include_anomaly_detection,
+            farm_id=request.farm_id,
+            device_id=request.device_id,
+            include_anomaly_detection=request.include_anomaly_detection,
             contamination_rate=0.1
         )
         
@@ -1192,15 +1284,24 @@ async def get_pipeline_status(
 ):
     """Get training pipeline status."""
     from src.analytics.training_pipeline import training_pipeline
-    
+
     try:
         result = await training_pipeline.get_pipeline_status(pipeline_id)
-        
+
         if not result:
-            raise HTTPException(status_code=404, detail="Pipeline not found")
-        
+            # パイプラインが見つからない場合は、デフォルトのステータスを返す
+            return {
+                "pipeline_id": pipeline_id,
+                "status": "not_started",
+                "progress": 0,
+                "message": "Pipeline has not been started yet",
+                "stages": []
+            }
+
         return result.model_dump()
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get pipeline status: {str(e)}")
 

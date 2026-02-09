@@ -12,7 +12,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.influxdb import get_influxdb_client
+from src.database.influxdb import InfluxDBClient
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -117,9 +117,12 @@ class TrendAnalysisResult(BaseModel):
 
 class DataAggregationService:
     """データ集約サービス"""
-    
+
     def __init__(self):
-        self.influx_client = get_influxdb_client()
+        # Create new InfluxDB client instance and connect
+        # (Same pattern as StatisticalAnalyzer)
+        self.influx_client = InfluxDBClient()
+        self.influx_client.connect()
     
     async def aggregate_sensor_data(
         self,
@@ -136,15 +139,15 @@ class DataAggregationService:
         センサーデータを指定された時間窓で集約
         """
         try:
-            query_client = self.influx_client.query_api()
-            
             # Flux クエリを構築
             flux_query = f'''
-            from(bucket: "bsf_monitoring")
+            from(bucket: "{self.influx_client.bucket}")
             |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
-            |> filter(fn: (r) => r["_measurement"] == "{measurement_type}")
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> filter(fn: (r) => r["measurement_type"] == "{measurement_type}")
+            |> filter(fn: (r) => r["_field"] == "value")
             '''
-            
+
             # フィルター条件を追加
             if farm_id:
                 flux_query += f'|> filter(fn: (r) => r["farm_id"] == "{farm_id}")\n'
@@ -152,17 +155,17 @@ class DataAggregationService:
                 flux_query += f'|> filter(fn: (r) => r["device_id"] == "{device_id}")\n'
             if location:
                 flux_query += f'|> filter(fn: (r) => r["location"] == "{location}")\n'
-            
+
             # 集約を追加
             flux_query += f'''
             |> aggregateWindow(every: {window.value}, fn: {aggregation_func.value}, createEmpty: false)
             |> yield(name: "aggregated")
             '''
-            
+
             logger.debug(f"Executing aggregation query: {flux_query}")
-            
-            # クエリ実行
-            tables = query_client.query(query=flux_query)
+
+            # クエリ実行 - use wrapper method that includes org
+            tables = self.influx_client.query(flux_query)
             
             aggregated_data = []
             for table in tables:
@@ -200,22 +203,22 @@ class DataAggregationService:
         """
         try:
             # 元データを取得
-            query_client = self.influx_client.query_api()
-            
             flux_query = f'''
-            from(bucket: "bsf_monitoring")
+            from(bucket: "{self.influx_client.bucket}")
             |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
-            |> filter(fn: (r) => r["_measurement"] == "{measurement_type}")
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> filter(fn: (r) => r["measurement_type"] == "{measurement_type}")
+            |> filter(fn: (r) => r["_field"] == "value")
             '''
-            
+
             if farm_id:
                 flux_query += f'|> filter(fn: (r) => r["farm_id"] == "{farm_id}")\n'
             if device_id:
                 flux_query += f'|> filter(fn: (r) => r["device_id"] == "{device_id}")\n'
-            
+
             flux_query += '|> sort(columns: ["_time"])\n'
-            
-            tables = query_client.query(query=flux_query)
+
+            tables = self.influx_client.query(flux_query)
             
             # データをPandasで処理
             data_points = []
@@ -287,21 +290,22 @@ class DataAggregationService:
         データ品質を評価
         """
         try:
-            query_client = self.influx_client.query_api()
-            
             # 全データを取得
             flux_query = f'''
-            from(bucket: "bsf_monitoring")
+            from(bucket: "{self.influx_client.bucket}")
             |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
-            |> filter(fn: (r) => r["_measurement"] == "{measurement_type}")
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> filter(fn: (r) => r["measurement_type"] == "{measurement_type}")
+            |> filter(fn: (r) => r["_field"] == "value")
             '''
-            
+
             if farm_id:
                 flux_query += f'|> filter(fn: (r) => r["farm_id"] == "{farm_id}")\n'
             if device_id:
                 flux_query += f'|> filter(fn: (r) => r["device_id"] == "{device_id}")\n'
-            
-            tables = query_client.query(query=flux_query)
+
+            # Use wrapper method that includes org
+            tables = self.influx_client.query(flux_query)
             
             # データを収集
             values = []

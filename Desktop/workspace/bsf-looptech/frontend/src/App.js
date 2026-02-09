@@ -10,9 +10,13 @@ import {
   Box,
   Menu,
   MenuItem,
-  IconButton
+  IconButton,
+  ThemeProvider,
+  CssBaseline
 } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
+import OceanInspiredHeader from './components/ui/OceanInspiredHeader';
+import theme from './theme/materialTheme';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { OptimizedDataProvider } from './contexts/OptimizedDataContext';
 import LoginForm from './components/auth/LoginForm';
@@ -36,6 +40,7 @@ import AlertNotificationCenter from './components/alerts/AlertNotificationCenter
 import BatchComparison from './components/batch/BatchComparison.js';
 import ProfitabilityDashboard from './components/batch/ProfitabilityDashboard.js';
 import FeedEfficiencyTracker from './components/batch/FeedEfficiencyTracker.js';
+import TemperatureSensorDashboard from './components/sensors/TemperatureSensorDashboard.js';
 
 // Main Dashboard Component
 const Dashboard = () => {
@@ -79,13 +84,13 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            BSF幼虫養殖環境管理システム
-          </Typography>
+      {/* Ocean Inspired Header */}
+      <OceanInspiredHeader />
+      
+      <AppBar position="static" sx={{ background: 'transparent', boxShadow: 'none', mb: 2 }}>
+        <Toolbar sx={{ justifyContent: 'flex-end', minHeight: '48px !important' }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="body2" sx={{ mr: 2 }}>
+            <Typography variant="body2" sx={{ mr: 2, color: '#64748b' }}>
               {user?.username} ({user?.role})
             </Typography>
             <IconButton
@@ -95,7 +100,7 @@ const Dashboard = () => {
               aria-controls="menu-appbar"
               aria-haspopup="true"
               onClick={handleMenuOpen}
-              color="inherit"
+              sx={{ color: '#64748b' }}
             >
               <AccountCircle />
             </IconButton>
@@ -121,8 +126,18 @@ const Dashboard = () => {
         </Toolbar>
       </AppBar>
       
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}>
-        <Tabs value={selectedTab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
+      <Box className="ocean-tabs" sx={{ mt: 2 }}>
+        <Tabs 
+          value={selectedTab} 
+          onChange={handleTabChange} 
+          variant="scrollable" 
+          scrollButtons="auto"
+          sx={{
+            '& .MuiTabs-indicator': {
+              display: 'none'
+            }
+          }}
+        >
           <Tab label="リアルタイムダッシュボード" />
           <Tab label="ライブセンサー監視" />
           <Tab label="リアルタイムチャート" />
@@ -142,6 +157,7 @@ const Dashboard = () => {
           <Tab label="バッチ比較" />
           <Tab label="収益性分析" />
           <Tab label="飼料効率追跡" />
+          <Tab label="温度センサー監視" />
         </Tabs>
       </Box>
       
@@ -208,6 +224,9 @@ const Dashboard = () => {
       {selectedTab === 18 && (
         <FeedEfficiencyTracker />
       )}
+      {selectedTab === 19 && (
+        <TemperatureSensorDashboard farmId="farm-001" />
+      )}
     </Container>
   );
 };
@@ -215,24 +234,27 @@ const Dashboard = () => {
 // Main App Component with Routing
 const App = () => {
   return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginForm />} />
-          <Route 
-            path="/" 
-            element={
-              <PrivateRoute>
-                <OptimizedDataProvider>
-                  <Dashboard />
-                </OptimizedDataProvider>
-              </PrivateRoute>
-            } 
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
-    </Router>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginForm />} />
+            <Route 
+              path="/" 
+              element={
+                <PrivateRoute>
+                  <OptimizedDataProvider>
+                    <Dashboard />
+                  </OptimizedDataProvider>
+                </PrivateRoute>
+              } 
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AuthProvider>
+      </Router>
+    </ThemeProvider>
   );
 };
 

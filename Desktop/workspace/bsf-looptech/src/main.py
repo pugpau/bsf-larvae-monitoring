@@ -5,10 +5,12 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from src.utils.logging import setup_logging, get_logger
 from src.api.routes import substrate, sensors, websocket, auth, analytics
+from src.api.routes import quality, process, audit
 from src.mqtt.client import connect_mqtt
 from src.database.influxdb import InfluxDBClient
 from src.auth.middleware import AuthenticationMiddleware, RateLimitMiddleware
 from fastapi.middleware.cors import CORSMiddleware
+from src.config import settings
 
 # Load environment variables from .env file
 load_dotenv()
@@ -114,9 +116,13 @@ app = FastAPI(
 )
 
 # Add CORS middleware
+# Parse origins from environment variable (comma-separated)
+cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
+logger.info(f"CORS allowed origins: {cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -140,6 +146,9 @@ app.include_router(substrate.router)
 app.include_router(sensors.router)
 app.include_router(websocket.router)
 app.include_router(analytics.router)
+app.include_router(quality.router)
+app.include_router(process.router)
+app.include_router(audit.router)
 
 @app.get("/")
 async def read_root():
@@ -147,6 +156,13 @@ async def read_root():
     Root endpoint providing a welcome message.
     """
     return {"message": "Welcome to the BSF Larvae Monitoring System API"}
+
+@app.get("/favicon.ico")
+async def favicon():
+    """
+    Return a simple favicon response to avoid 500 errors.
+    """
+    return {"message": "No favicon available"}
 
 @app.get("/health")
 async def health_check():

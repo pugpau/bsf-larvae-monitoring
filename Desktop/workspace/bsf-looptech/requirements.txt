@@ -21,5 +21,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 email-validator
+# HTTP client for JWKS fetching (Supabase JWT validation)
+httpx
 # Prometheus client for monitoring (optional, add later if needed)
 # prometheus-fastapi-instrumentator

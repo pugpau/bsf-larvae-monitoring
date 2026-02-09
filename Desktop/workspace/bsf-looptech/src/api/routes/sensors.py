@@ -5,18 +5,25 @@ API routes for sensor data management.
 from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.sensors.models import (
     SensorReadingCreate, SensorDeviceCreate, SensorAlertCreate, SensorThresholdCreate,
     SensorReadingResponse, SensorDeviceResponse, SensorAlertResponse, SensorThresholdResponse,
     SensorDeviceUpdate, SensorAlertUpdate, SensorThresholdUpdate
 )
 from src.sensors.service import SensorService
+from src.sensors.device_repository import SensorDeviceRepository
+from src.database.postgresql import get_async_session
 
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 
 # Dependency
 def get_sensor_service():
     return SensorService()
+
+# Dependency for PostgreSQL device repository
+async def get_device_repository(session: AsyncSession = Depends(get_async_session)):
+    return SensorDeviceRepository(session)
 
 # Sensor Reading endpoints
 @router.post("/readings", response_model=SensorReadingResponse, status_code=201)
@@ -85,19 +92,38 @@ async def get_sensor_readings(
 async def get_latest_readings(
     farm_id: str = Query(..., description="The farm ID"),
     device_type: Optional[str] = Query(None, description="Filter by device type"),
+    device_id: Optional[str] = Query(None, description="Filter by device ID"),
     location: Optional[str] = Query(None, description="Filter by location"),
-    service: SensorService = Depends(get_sensor_service)
+    service: SensorService = Depends(get_sensor_service),
+    device_repo: SensorDeviceRepository = Depends(get_device_repository)
 ):
-    """Get latest readings for each device."""
+    """Get latest readings for each device (devices from PostgreSQL, readings from InfluxDB)."""
     try:
-        results = service.get_latest_readings_by_device(
+        # Get devices from PostgreSQL
+        devices = await device_repo.get_sensor_devices(
             farm_id=farm_id,
             device_type=device_type,
+            status="active",
             location=location
         )
-        
-        return results
-    
+
+        # If specific device_id is requested, filter
+        if device_id:
+            devices = [d for d in devices if d.device_id == device_id]
+
+        # Get latest reading for each device from InfluxDB
+        latest_readings = {}
+        for device in devices:
+            readings = service.repository.get_sensor_readings(
+                farm_id=farm_id,
+                device_id=device.device_id,
+                limit=1
+            )
+            if readings:
+                latest_readings[device.device_id] = readings[0]
+
+        return latest_readings
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving latest readings: {str(e)}")
 
@@ -164,38 +190,48 @@ async def create_sensor_device(
 async def get_sensor_devices(
     farm_id: str = Query(..., description="The farm ID"),
     device_type: Optional[str] = Query(None, description="Filter by device type"),
-    device_id: Optional[str] = Query(None, description="Filter by device ID"),
     status: Optional[str] = Query(None, description="Filter by status"),
     location: Optional[str] = Query(None, description="Filter by location"),
-    service: SensorService = Depends(get_sensor_service)
+    repo: SensorDeviceRepository = Depends(get_device_repository)
 ):
-    """Get sensor devices with optional filters."""
+    """Get sensor devices with optional filters (from PostgreSQL)."""
     try:
-        results = service.get_sensor_devices(
+        results = await repo.get_sensor_devices(
             farm_id=farm_id,
             device_type=device_type,
-            device_id=device_id,
             status=status,
             location=location
         )
-        
+
         return results
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving sensor devices: {str(e)}")
+
+@router.get("/devices/status-summary", response_model=Dict[str, int])
+async def get_device_status_summary(
+    farm_id: str = Query(..., description="The farm ID"),
+    repo: SensorDeviceRepository = Depends(get_device_repository)
+):
+    """Get summary of device statuses (online, offline, error counts)."""
+    try:
+        result = await repo.get_device_status_summary(farm_id=farm_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving device status summary: {str(e)}")
 
 @router.get("/devices/{device_id}", response_model=SensorDeviceResponse)
 async def get_sensor_device(
     farm_id: str = Query(..., description="The farm ID"),
     device_id: str = Path(..., description="The device ID"),
-    service: SensorService = Depends(get_sensor_service)
+    repo: SensorDeviceRepository = Depends(get_device_repository)
 ):
-    """Get a sensor device by ID."""
-    result = service.get_sensor_device(farm_id, device_id)
-    
+    """Get a sensor device by ID (from PostgreSQL)."""
+    result = await repo.get_sensor_device(device_id)
+
     if not result:
         raise HTTPException(status_code=404, detail="Sensor device not found")
-    
+
     return result
 
 @router.patch("/devices/{device_id}", response_model=bool)
@@ -203,31 +239,31 @@ async def update_sensor_device(
     farm_id: str = Query(..., description="The farm ID"),
     device_id: str = Path(..., description="The device ID"),
     update_data: SensorDeviceUpdate = None,
-    service: SensorService = Depends(get_sensor_service)
+    repo: SensorDeviceRepository = Depends(get_device_repository)
 ):
-    """Update a sensor device."""
-    result = service.update_sensor_device(farm_id, device_id, update_data)
-    
+    """Update a sensor device (in PostgreSQL)."""
+    result = await repo.partial_update_sensor_device(device_id, update_data)
+
     if not result:
         raise HTTPException(status_code=500, detail="Failed to update sensor device")
-    
-    return result
+
+    return True
 
 @router.delete("/devices/{device_id}", response_model=bool)
 async def delete_sensor_device(
     farm_id: str = Query(..., description="The farm ID"),
     device_id: str = Path(..., description="The device ID"),
-    service: SensorService = Depends(get_sensor_service)
+    repo: SensorDeviceRepository = Depends(get_device_repository)
 ):
-    """Delete a sensor device."""
+    """Delete a sensor device (soft delete by setting status to inactive)."""
     # For now, we'll update the status to 'inactive' instead of actually deleting
     update_data = SensorDeviceUpdate(status="inactive")
-    result = service.update_sensor_device(farm_id, device_id, update_data)
-    
+    result = await repo.partial_update_sensor_device(device_id, update_data)
+
     if not result:
         raise HTTPException(status_code=404, detail="Sensor device not found")
-    
-    return result
+
+    return True
 
 # Sensor Alert endpoints
 @router.post("/alerts", response_model=SensorAlertResponse, status_code=201)

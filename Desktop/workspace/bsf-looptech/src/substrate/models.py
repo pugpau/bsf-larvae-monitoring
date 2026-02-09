@@ -16,7 +16,17 @@ class SubstrateTypeEnum(str, Enum):
     PIG_MANURE = "pig_manure"
     CHICKEN_MANURE = "chicken_manure"
     SAWDUST = "sawdust"
+    SOLIDIFIER = "solidifier"
+    ELUTION_SUPPRESSOR = "elution_suppressor"
     OTHER = "other"
+
+
+class MaterialCategory(str, Enum):
+    """Material category classification (Rev.2)."""
+    RAW_MATERIAL = "raw_material"
+    ADDITIVE = "additive"
+    SOLIDIFIER = "solidifier"
+    ELUTION_SUPPRESSOR = "elution_suppressor"
 
 
 class SubstrateAttribute(BaseModel):

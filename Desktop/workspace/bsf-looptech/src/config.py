@@ -2,8 +2,11 @@ import os
 from dotenv import load_dotenv
 from typing import Optional
 
-# Load .env file from the root directory
-dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+# Load .env.local file from the root directory
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env.local')
+if not os.path.exists(dotenv_path):
+    # Fallback to .env if .env.local doesn't exist
+    dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
 load_dotenv(dotenv_path=dotenv_path)
 
 
@@ -46,6 +49,17 @@ class Settings:
         # Control System Settings
         self.CONTROL_SYSTEM_API_ENDPOINT: Optional[str] = os.getenv("CONTROL_SYSTEM_API_ENDPOINT")
         self.CONTROL_SYSTEM_API_KEY: Optional[str] = os.getenv("CONTROL_SYSTEM_API_KEY")
+
+        # Supabase Settings (for JWKS JWT validation)
+        self.SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
+        self.SUPABASE_JWT_SECRET: Optional[str] = os.getenv("SUPABASE_JWT_SECRET")
+        self.SUPABASE_ANON_KEY: Optional[str] = os.getenv("SUPABASE_ANON_KEY")
+
+        # CORS Settings (comma-separated list of allowed origins)
+        self.CORS_ORIGINS: str = os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://localhost:3001"
+        )
 
         # Construct DATABASE_URL if not provided
         if not self.DATABASE_URL:

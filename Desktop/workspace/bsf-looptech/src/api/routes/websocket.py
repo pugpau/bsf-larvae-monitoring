@@ -14,7 +14,18 @@ from src.websocket.manager import websocket_manager, WebSocketMessage, MessageTy
 from src.utils.logging import get_logger
 from src.auth.security import SecurityConfig
 from src.auth.repository import UserRepository
+from src.auth.models import DEFAULT_ROLE_PERMISSIONS, UserRole
 from src.database.postgresql import get_async_session
+
+
+def get_user_permissions(role) -> list:
+    """Get permissions for a user role."""
+    try:
+        role_enum = UserRole(role) if isinstance(role, str) else role
+        perms = DEFAULT_ROLE_PERMISSIONS.get(role_enum, [])
+        return [p.value if hasattr(p, 'value') else str(p) for p in perms]
+    except (ValueError, KeyError):
+        return []
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -34,17 +45,19 @@ async def get_user_from_token(token: Optional[str]):
     if token == "demo-token":
         # Return mock user for development
         from src.auth.models import User, UserRole
-        return User(
+        user = User(
             id=uuid.uuid4(),
             username="demo",
             email="demo@example.com",
+            hashed_password="",  # Not used for demo
+            full_name="Demo User",
             role=UserRole.ADMIN,
             is_active=True,
             is_superuser=True,
-            permissions=["VIEW_ANALYTICS", "MANAGE_ANALYTICS", "VIEW_SENSORS", "MANAGE_SENSORS"],
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
         )
+        user.created_at = datetime.utcnow()
+        user.updated_at = datetime.utcnow()
+        return user
     
     try:
         # Decode JWT token
@@ -105,7 +118,7 @@ async def websocket_endpoint(
             "user_id": str(user.id),
             "username": user.username,
             "role": user.role,
-            "permissions": user.permissions
+            "permissions": get_user_permissions(user.role)
         })
         
         logger.info(f"WebSocket client {client_id} connected for user {user.username}")
@@ -172,7 +185,7 @@ async def farm_websocket_endpoint(
             "user_id": str(user.id),
             "username": user.username,
             "role": user.role,
-            "permissions": user.permissions,
+            "permissions": get_user_permissions(user.role),
             "farm_id": farm_id
         })
         
@@ -238,7 +251,7 @@ async def device_websocket_endpoint(
             "user_id": str(user.id),
             "username": user.username,
             "role": user.role,
-            "permissions": user.permissions,
+            "permissions": get_user_permissions(user.role),
             "device_id": device_id
         })
         

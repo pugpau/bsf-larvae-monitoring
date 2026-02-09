@@ -354,8 +354,8 @@ class TrendAnalysisEngine:
                 farm_id=farm_id
             )
             
-            if len(aggregated_data) < 10:
-                raise ValueError("Insufficient historical data for forecasting")
+            if len(aggregated_data) < 5:
+                raise ValueError(f"Insufficient historical data for forecasting. Need at least 5 data points, got {len(aggregated_data)}")
             
             # データをPandasで処理
             df = pd.DataFrame([

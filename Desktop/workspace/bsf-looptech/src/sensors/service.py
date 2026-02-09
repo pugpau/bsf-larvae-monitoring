@@ -283,6 +283,12 @@ class SensorService:
                 device.description = update_data.description
             if update_data.location is not None:
                 device.location = update_data.location
+            if update_data.x_position is not None:
+                device.x_position = update_data.x_position
+            if update_data.y_position is not None:
+                device.y_position = update_data.y_position
+            if update_data.z_position is not None:
+                device.z_position = update_data.z_position
             if update_data.status is not None:
                 device.status = update_data.status
             if update_data.metadata is not None:
