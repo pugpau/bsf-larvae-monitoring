@@ -1,261 +1,273 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Paper, 
-  IconButton,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Snackbar,
-  Alert,
-  Chip
+import {
+  Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Paper, IconButton, Button, Chip, Dialog, DialogActions, DialogContent,
+  DialogTitle, Snackbar, Alert
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, Info as InfoIcon } from '@mui/icons-material';
-import axios from 'axios';
-import { getSubstrateBatches, deleteSubstrateBatch } from '../../utils/storage';
+import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Visibility as ViewIcon } from '@mui/icons-material';
+import { getSubstrateBatches, deleteSubstrateBatch, ELUTION_THRESHOLDS } from '../../utils/storage';
+
+const STATUS_CONFIG = {
+  pending: { label: '未分析', color: 'default' },
+  analyzed: { label: '分析済', color: 'info' },
+  formulated: { label: '配合済', color: 'success' }
+};
 
 const SubstrateBatchList = ({ onEdit }) => {
-  const [substrateBatches, setSubstrateBatches] = useState([]);
+  const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [batchToDelete, setBatchToDelete] = useState(null);
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [selectedBatch, setSelectedBatch] = useState(null);
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, target: null });
+  const [detailDialog, setDetailDialog] = useState({ open: false, record: null });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const fetchSubstrateBatches = async () => {
+  const loadRecords = () => {
     setLoading(true);
     try {
-      // ローカルストレージから基質バッチを取得
       const data = getSubstrateBatches();
-      
-      setSubstrateBatches(data);
-      setError(null);
+      setRecords(data.sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate)));
     } catch (err) {
-      console.error('基質バッチの取得に失敗しました', err);
-      setError('基質バッチの取得に失敗しました。');
+      setSnackbar({ open: true, message: '読み込みに失敗しました', severity: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchSubstrateBatches();
-  }, []);
+  useEffect(() => { loadRecords(); }, []);
 
-  const handleEditClick = (batch) => {
-    if (onEdit) {
-      onEdit(batch);
-    }
-  };
-
-  const handleDeleteClick = (batch) => {
-    setBatchToDelete(batch);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDetailsClick = (batch) => {
-    setSelectedBatch(batch);
-    setDetailsDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!batchToDelete) return;
-
+  const handleDelete = () => {
+    if (!deleteDialog.target) return;
     try {
-      // ローカルストレージから削除
-      deleteSubstrateBatch(batchToDelete.id);
-      setSubstrateBatches(substrateBatches.filter(batch => batch.id !== batchToDelete.id));
-      setSnackbarMessage('基質バッチを削除しました。');
-      setSnackbarSeverity('success');
-      setOpenSnackbar(true);
+      deleteSubstrateBatch(deleteDialog.target.id);
+      setDeleteDialog({ open: false, target: null });
+      setSnackbar({ open: true, message: '削除しました', severity: 'success' });
+      loadRecords();
     } catch (err) {
-      console.error('基質バッチの削除に失敗しました', err);
-      setSnackbarMessage('基質バッチの削除に失敗しました。');
-      setSnackbarSeverity('error');
-      setOpenSnackbar(true);
-    } finally {
-      setDeleteDialogOpen(false);
-      setBatchToDelete(null);
+      setSnackbar({ open: true, message: '削除に失敗しました', severity: 'error' });
     }
   };
 
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-    setBatchToDelete(null);
+  const hasExceedance = (analysis) => {
+    if (!analysis) return false;
+    return Object.entries(ELUTION_THRESHOLDS).some(([key, threshold]) => {
+      const val = analysis[key];
+      return val !== undefined && val !== null && val > threshold.limit;
+    });
   };
 
-  const handleDetailsClose = () => {
-    setDetailsDialogOpen(false);
-    setSelectedBatch(null);
+  const handleNewRecord = () => {
+    if (onEdit) onEdit({});
   };
-
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setOpenSnackbar(false);
-  };
-
-  if (loading) {
-    return <Typography>読み込み中...</Typography>;
-  }
-
-  if (error) {
-    return <Typography color="error">{error}</Typography>;
-  }
 
   return (
-    <Box sx={{ maxWidth: 800, margin: 'auto', p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        基質バッチ一覧
-      </Typography>
-      
-      {substrateBatches.length === 0 ? (
-        <Typography>基質バッチがありません。</Typography>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
+    <Box className="section-panel">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography className="section-panel__title" sx={{ mb: '0 !important', pb: '0 !important', borderBottom: 'none !important' }}>
+          搬入履歴
+        </Typography>
+        <Button variant="contained" startIcon={<AddIcon />} size="small" onClick={handleNewRecord}>
+          新規登録
+        </Button>
+      </Box>
+
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>搬入日</TableCell>
+              <TableCell>搬入元</TableCell>
+              <TableCell>廃棄物種別</TableCell>
+              <TableCell align="right">重量</TableCell>
+              <TableCell align="right">pH</TableCell>
+              <TableCell align="right">含水率</TableCell>
+              <TableCell>基準超過</TableCell>
+              <TableCell>ステータス</TableCell>
+              <TableCell align="center">操作</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
               <TableRow>
-                <TableCell>ファームID</TableCell>
-                <TableCell>バッチ名</TableCell>
-                <TableCell>総重量</TableCell>
-                <TableCell>保管場所</TableCell>
-                <TableCell>操作</TableCell>
+                <TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                  読み込み中...
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {substrateBatches.map((batch) => (
-                <TableRow key={batch.id}>
-                  <TableCell>{batch.farm_id}</TableCell>
-                  <TableCell>{batch.name}</TableCell>
-                  <TableCell>{batch.total_weight} {batch.weight_unit}</TableCell>
-                  <TableCell>{batch.location}</TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleDetailsClick(batch)}>
-                      <InfoIcon />
-                    </IconButton>
-                    <IconButton onClick={() => handleEditClick(batch)}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton onClick={() => handleDeleteClick(batch)}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+            ) : records.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                  搬入記録がありません
+                </TableCell>
+              </TableRow>
+            ) : (
+              records.map((record) => {
+                const exceeded = hasExceedance(record.analysis);
+                const statusCfg = STATUS_CONFIG[record.status] || STATUS_CONFIG.pending;
+                return (
+                  <TableRow key={record.id}>
+                    <TableCell sx={{ fontFamily: "'Fira Code', monospace", whiteSpace: 'nowrap' }}>
+                      {record.deliveryDate}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>{record.source}</TableCell>
+                    <TableCell>{record.wasteType}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                      {record.weight} {record.weightUnit}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                      {record.analysis?.pH ?? '-'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                      {record.analysis?.moisture ? `${record.analysis.moisture}%` : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {record.analysis ? (
+                        exceeded ? (
+                          <span className="status-fail">超過あり</span>
+                        ) : (
+                          <span className="status-pass">基準内</span>
+                        )
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={statusCfg.label} size="small" color={statusCfg.color} variant="outlined" />
+                    </TableCell>
+                    <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
+                      <IconButton size="small" onClick={() => setDetailDialog({ open: true, record })} color="info">
+                        <ViewIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => onEdit(record)} color="primary">
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => setDeleteDialog({ open: true, target: record })} color="error">
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      {/* 詳細ダイアログ */}
-      <Dialog
-        open={detailsDialogOpen}
-        onClose={handleDetailsClose}
-        maxWidth="md"
-      >
-        <DialogTitle>基質バッチ詳細</DialogTitle>
+      {/* Detail Dialog */}
+      <Dialog open={detailDialog.open} onClose={() => setDetailDialog({ open: false, record: null })} maxWidth="sm" fullWidth>
+        <DialogTitle>搬入詳細</DialogTitle>
         <DialogContent>
-          {selectedBatch && (
+          {detailDialog.record && (
             <Box>
-              <Typography variant="subtitle1">基本情報</Typography>
-              <TableContainer component={Paper} sx={{ mb: 2 }}>
-                <Table size="small">
-                  <TableBody>
-                    <TableRow>
-                      <TableCell component="th" scope="row">ファームID</TableCell>
-                      <TableCell>{selectedBatch.farm_id}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th" scope="row">バッチ名</TableCell>
-                      <TableCell>{selectedBatch.name}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th" scope="row">説明</TableCell>
-                      <TableCell>{selectedBatch.description}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th" scope="row">総重量</TableCell>
-                      <TableCell>{selectedBatch.total_weight} {selectedBatch.weight_unit}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th" scope="row">バッチ番号</TableCell>
-                      <TableCell>{selectedBatch.batch_number}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th" scope="row">保管場所</TableCell>
-                      <TableCell>{selectedBatch.location}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>基本情報</Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 2 }}>
+                <Typography variant="body2">搬入元: <strong>{detailDialog.record.source}</strong></Typography>
+                <Typography variant="body2">搬入日: <strong style={{ fontFamily: "'Fira Code', monospace" }}>{detailDialog.record.deliveryDate}</strong></Typography>
+                <Typography variant="body2">種別: <strong>{detailDialog.record.wasteType}</strong></Typography>
+                <Typography variant="body2">重量: <strong style={{ fontFamily: "'Fira Code', monospace" }}>{detailDialog.record.weight} {detailDialog.record.weightUnit}</strong></Typography>
+              </Box>
 
-              <Typography variant="subtitle1">基質コンポーネント</Typography>
-              <TableContainer component={Paper}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>基質タイプ</TableCell>
-                      <TableCell>比率 (%)</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {selectedBatch.components && selectedBatch.components.map((component, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{component.substrate_type_name || component.substrate_type_id}</TableCell>
-                        <TableCell>{component.ratio}%</TableCell>
+              {detailDialog.record.analysis && Object.keys(detailDialog.record.analysis).length > 0 && (
+                <>
+                  <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>分析結果</Typography>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>項目</TableCell>
+                        <TableCell align="right">測定値</TableCell>
+                        <TableCell align="right">基準値</TableCell>
+                        <TableCell>判定</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {detailDialog.record.analysis.pH !== undefined && (
+                        <TableRow>
+                          <TableCell>pH</TableCell>
+                          <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                            {detailDialog.record.analysis.pH}
+                          </TableCell>
+                          <TableCell align="right">-</TableCell>
+                          <TableCell>-</TableCell>
+                        </TableRow>
+                      )}
+                      {detailDialog.record.analysis.moisture !== undefined && (
+                        <TableRow>
+                          <TableCell>含水率</TableCell>
+                          <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                            {detailDialog.record.analysis.moisture}%
+                          </TableCell>
+                          <TableCell align="right">-</TableCell>
+                          <TableCell>-</TableCell>
+                        </TableRow>
+                      )}
+                      {Object.entries(ELUTION_THRESHOLDS).map(([key, threshold]) => {
+                        const val = detailDialog.record.analysis[key];
+                        if (val === undefined || val === null) return null;
+                        const exceeded = val > threshold.limit;
+                        return (
+                          <TableRow key={key}>
+                            <TableCell>{threshold.name} ({key})</TableCell>
+                            <TableCell align="right" sx={{
+                              fontFamily: "'Fira Code', monospace",
+                              fontWeight: exceeded ? 600 : 400,
+                              color: exceeded ? '#DC2626' : 'inherit'
+                            }}>
+                              {val}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                              {threshold.limit} {threshold.unit}
+                            </TableCell>
+                            <TableCell>
+                              <span className={exceeded ? 'status-fail' : 'status-pass'}>
+                                {exceeded ? '超過' : '合格'}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+
+              {detailDialog.record.formulation && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>配合情報</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                    固化剤: {detailDialog.record.formulation.solidifierType} ({detailDialog.record.formulation.solidifierAmount} {detailDialog.record.formulation.solidifierUnit})
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                    抑制材: {detailDialog.record.formulation.suppressorType} ({detailDialog.record.formulation.suppressorAmount} {detailDialog.record.formulation.suppressorUnit})
+                  </Typography>
+                </Box>
+              )}
+
+              {detailDialog.record.notes && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>備考</Typography>
+                  <Typography variant="body2">{detailDialog.record.notes}</Typography>
+                </Box>
+              )}
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDetailsClose}>閉じる</Button>
+          <Button onClick={() => setDetailDialog({ open: false, record: null })}>閉じる</Button>
         </DialogActions>
       </Dialog>
 
-      {/* 削除確認ダイアログ */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-      >
-        <DialogTitle>基質バッチの削除</DialogTitle>
+      {/* Delete Dialog */}
+      <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, target: null })}>
+        <DialogTitle>削除確認</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            {batchToDelete && `基質バッチ「${batchToDelete.name}」を削除しますか？`}
-            この操作は元に戻せません。
-          </DialogContentText>
+          <Typography>
+            {deleteDialog.target?.source} ({deleteDialog.target?.deliveryDate}) の搬入記録を削除しますか？
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel}>キャンセル</Button>
-          <Button onClick={handleDeleteConfirm} color="error">
-            削除
-          </Button>
+          <Button onClick={() => setDeleteDialog({ open: false, target: null })}>キャンセル</Button>
+          <Button onClick={handleDelete} color="error" variant="contained">削除</Button>
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={handleSnackbarClose}>
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
+      <Snackbar open={snackbar.open} autoHideDuration={3000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+        <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
       </Snackbar>
     </Box>
   );

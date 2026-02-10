@@ -1,207 +1,140 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Paper, 
-  IconButton,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Snackbar,
-  Alert
+import {
+  Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Paper, IconButton, Button, Chip, Dialog, DialogActions, DialogContent,
+  DialogTitle, Snackbar, Alert
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import axios from 'axios';
-import { getSubstrateTypes, deleteSubstrateType } from '../../utils/storage';
-import { getCategoryLabel } from '../../utils/unifiedData';
+import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
+import { getSubstrateTypes, deleteSubstrateType, getCategoryLabel } from '../../utils/storage';
+
+const CATEGORY_COLORS = {
+  solidifier: 'primary',
+  suppressor: 'warning',
+  waste_type: 'default'
+};
 
 const SubstrateTypeList = ({ onEdit }) => {
-  const [substrateTypes, setSubstrateTypes] = useState([]);
+  const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [typeToDelete, setTypeToDelete] = useState(null);
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, target: null });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const fetchSubstrateTypes = async () => {
+  const loadTypes = () => {
     setLoading(true);
     try {
-      // モックデータを使用
-      const mockData = [
-        {
-          id: '1',
-          name: '下水汚泥タイプA',
-          type: 'sewage_sludge',
-          description: '下水処理場から回収した汚泥',
-          attributes: [
-            { name: '水分含有量', value: '60', unit: '%' },
-            { name: 'pH', value: '6.5', unit: '' }
-          ]
-        },
-        {
-          id: '2',
-          name: '鶏糞タイプB',
-          type: 'chicken_manure',
-          description: '養鶏場から回収した鶏糞',
-          attributes: [
-            { name: '窒素含有量', value: '4', unit: '%' },
-            { name: 'リン含有量', value: '2', unit: '%' }
-          ]
-        },
-        {
-          id: '3',
-          name: 'おが屑タイプC',
-          type: 'sawdust',
-          description: '製材所から回収したおが屑',
-          attributes: [
-            { name: '水分含有量', value: '15', unit: '%' },
-            { name: '粒径', value: '2', unit: 'mm' }
-          ]
-        }
-      ];
-      
-      // ローカルストレージから基質タイプを取得
       const data = getSubstrateTypes();
-      setSubstrateTypes(data);
-      setError(null);
+      setTypes(data);
     } catch (err) {
-      console.error('基質タイプの取得に失敗しました', err);
-      setError('基質タイプの取得に失敗しました。');
+      setSnackbar({ open: true, message: 'データの読み込みに失敗しました', severity: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchSubstrateTypes();
-  }, []);
+  useEffect(() => { loadTypes(); }, []);
 
-  const handleEditClick = (substrateType) => {
-    if (onEdit) {
-      onEdit(substrateType);
-    }
-  };
-
-  const handleDeleteClick = (substrateType) => {
-    setTypeToDelete(substrateType);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!typeToDelete) return;
-
+  const handleDelete = () => {
+    if (!deleteDialog.target) return;
     try {
-      // ローカルストレージから削除
-      deleteSubstrateType(typeToDelete.id);
-      setSubstrateTypes(substrateTypes.filter(type => type.id !== typeToDelete.id));
-      setSnackbarMessage('基質タイプを削除しました。');
-      setSnackbarSeverity('success');
-      setOpenSnackbar(true);
+      deleteSubstrateType(deleteDialog.target.id);
+      setDeleteDialog({ open: false, target: null });
+      setSnackbar({ open: true, message: '削除しました', severity: 'success' });
+      loadTypes();
     } catch (err) {
-      console.error('基質タイプの削除に失敗しました', err);
-      setSnackbarMessage('基質タイプの削除に失敗しました。');
-      setSnackbarSeverity('error');
-      setOpenSnackbar(true);
-    } finally {
-      setDeleteDialogOpen(false);
-      setTypeToDelete(null);
+      setSnackbar({ open: true, message: '削除に失敗しました', severity: 'error' });
     }
   };
 
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-    setTypeToDelete(null);
+  const handleNewType = () => {
+    if (onEdit) onEdit(null);
   };
-
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setOpenSnackbar(false);
-  };
-
-  if (loading) {
-    return <Typography>読み込み中...</Typography>;
-  }
-
-  if (error) {
-    return <Typography color="error">{error}</Typography>;
-  }
 
   return (
-    <Box sx={{ maxWidth: 800, margin: 'auto', p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        基質タイプ一覧
-      </Typography>
-      
-      {substrateTypes.length === 0 ? (
-        <Typography>基質タイプがありません。</Typography>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
+    <Box className="section-panel">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography className="section-panel__title" sx={{ mb: '0 !important', pb: '0 !important', borderBottom: 'none !important' }}>
+          材料マスタ一覧
+        </Typography>
+        <Button variant="contained" startIcon={<AddIcon />} size="small" onClick={handleNewType}>
+          新規登録
+        </Button>
+      </Box>
+
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>カテゴリ</TableCell>
+              <TableCell>材料名</TableCell>
+              <TableCell>仕入先</TableCell>
+              <TableCell align="right">単価（円）</TableCell>
+              <TableCell>単位</TableCell>
+              <TableCell>説明</TableCell>
+              <TableCell align="center">操作</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
               <TableRow>
-                <TableCell>名前</TableCell>
-                <TableCell>カテゴリ</TableCell>
-                <TableCell>説明</TableCell>
-                <TableCell>操作</TableCell>
+                <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                  読み込み中...
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {substrateTypes.map((type) => (
+            ) : types.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                  材料が登録されていません
+                </TableCell>
+              </TableRow>
+            ) : (
+              types.map((type) => (
                 <TableRow key={type.id}>
-                  <TableCell>{type.name}</TableCell>
-                  <TableCell>{getCategoryLabel(type.type)}</TableCell>
-                  <TableCell>{type.description}</TableCell>
                   <TableCell>
-                    <IconButton onClick={() => handleEditClick(type)}>
-                      <EditIcon />
+                    <Chip
+                      label={getCategoryLabel(type.category || type.type)}
+                      size="small"
+                      color={CATEGORY_COLORS[type.category || type.type] || 'default'}
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 500 }}>{type.name}</TableCell>
+                  <TableCell>{type.supplier || '-'}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                    {type.unitCost ? type.unitCost.toLocaleString() : '-'}
+                  </TableCell>
+                  <TableCell>{type.unit || '-'}</TableCell>
+                  <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {type.description || '-'}
+                  </TableCell>
+                  <TableCell align="center">
+                    <IconButton size="small" onClick={() => onEdit(type)} color="primary">
+                      <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton onClick={() => handleDeleteClick(type)}>
-                      <DeleteIcon />
+                    <IconButton size="small" onClick={() => setDeleteDialog({ open: true, target: type })} color="error">
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-      >
-        <DialogTitle>基質タイプの削除</DialogTitle>
+      <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, target: null })}>
+        <DialogTitle>削除確認</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            {typeToDelete && `基質タイプ「${typeToDelete.name}」を削除しますか？`}
-            この操作は元に戻せません。
-          </DialogContentText>
+          <Typography>「{deleteDialog.target?.name}」を削除しますか？</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel}>キャンセル</Button>
-          <Button onClick={handleDeleteConfirm} color="error">
-            削除
-          </Button>
+          <Button onClick={() => setDeleteDialog({ open: false, target: null })}>キャンセル</Button>
+          <Button onClick={handleDelete} color="error" variant="contained">削除</Button>
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={handleSnackbarClose}>
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
+      <Snackbar open={snackbar.open} autoHideDuration={3000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+        <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
       </Snackbar>
     </Box>
   );

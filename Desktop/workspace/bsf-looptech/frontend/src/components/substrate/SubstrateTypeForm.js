@@ -1,360 +1,217 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Button, 
-  TextField, 
-  Typography, 
-  Select, 
-  MenuItem, 
-  FormControl, 
-  InputLabel, 
-  Grid,
-  IconButton,
-  Snackbar,
-  Alert,
-  FormHelperText
+import {
+  Box, TextField, Button, Typography, Grid, Select, MenuItem,
+  FormControl, InputLabel, IconButton, Snackbar, Alert, FormHelperText
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import axios from 'axios';
-import { saveSubstrateType, updateSubstrateType } from '../../utils/storage';
-import { SUBSTRATE_CATEGORIES } from '../../utils/unifiedData';
+import { saveSubstrateType, updateSubstrateType, MATERIAL_CATEGORIES } from '../../utils/storage';
 
-// 統一された基質カテゴリを使用
-const SubstrateTypeOptions = Object.entries(SUBSTRATE_CATEGORIES).map(([key, label]) => ({
-  value: key,
-  label: label
-}));
+const INITIAL_STATE = {
+  name: '',
+  category: '',
+  description: '',
+  supplier: '',
+  unitCost: '',
+  unit: 'kg',
+  attributes: []
+};
 
 const SubstrateTypeForm = ({ initialData, onSubmitSuccess }) => {
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [type, setType] = useState('');
-  const [description, setDescription] = useState('');
-  const [attributes, setAttributes] = useState([]);
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success'); // 'success' or 'error'
+  const [form, setForm] = useState(INITIAL_STATE);
   const [isEditing, setIsEditing] = useState(false);
-  
-  // バリデーション状態
-  const [errors, setErrors] = useState({
-    name: '',
-    type: '',
-    attributes: []
-  });
+  const [errors, setErrors] = useState({});
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  // 初期データがある場合はフォームに設定
   useEffect(() => {
     if (initialData) {
-      setId(initialData.id || '');
-      setName(initialData.name || '');
-      setType(initialData.type || '');
-      setDescription(initialData.description || '');
-      setAttributes(initialData.attributes || []);
+      setForm({
+        ...INITIAL_STATE,
+        ...initialData,
+        unitCost: initialData.unitCost?.toString() || ''
+      });
       setIsEditing(true);
-    } else {
-      resetForm();
-      setIsEditing(false);
     }
   }, [initialData]);
 
-  const resetForm = () => {
-    setId('');
-    setName('');
-    setType('');
-    setDescription('');
-    setAttributes([]);
-  };
-
-  const addAttribute = () => {
-    setAttributes([...attributes, { name: '', value: '', unit: '' }]);
-  };
-
-  const updateAttribute = (index, field, value) => {
-    const newAttributes = [...attributes];
-    // 値が数値の場合は文字列に変換
-    if (field === 'value' && typeof value === 'number') {
-      newAttributes[index][field] = String(value);
-    } else {
-      newAttributes[index][field] = value;
+  const handleChange = (field) => (e) => {
+    setForm(prev => ({ ...prev, [field]: e.target.value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
     }
-    setAttributes(newAttributes);
   };
 
-  const removeAttribute = (index) => {
-    const newAttributes = attributes.filter((_, i) => i !== index);
-    setAttributes(newAttributes);
-  };
-
-  // フォームバリデーション
-  const validateForm = () => {
-    const newErrors = {
-      name: '',
-      type: '',
-      attributes: Array(attributes.length).fill('')
-    };
-    
-    let isValid = true;
-    
-    // 名前のバリデーション
-    if (!name.trim()) {
-      newErrors.name = '基質タイプ名は必須です';
-      isValid = false;
-    } else if (name.length > 50) {
-      newErrors.name = '基質タイプ名は50文字以内で入力してください';
-      isValid = false;
-    }
-    
-    // タイプのバリデーション
-    if (!type) {
-      newErrors.type = '基質カテゴリは必須です';
-      isValid = false;
-    }
-    
-    // 属性のバリデーション
-    attributes.forEach((attr, index) => {
-      if (attr.name.trim() && (attr.value === '' || attr.value === null || attr.value === undefined)) {
-        newErrors.attributes[index] = '属性に値を入力してください';
-        isValid = false;
-      } else if (attr.value && !attr.name.trim()) {
-        newErrors.attributes[index] = '属性名を入力してください';
-        isValid = false;
-      }
-    });
-    
-    setErrors(newErrors);
-    return isValid;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // フォームバリデーション
-    if (!validateForm()) {
-      setSnackbarMessage('入力内容に誤りがあります。修正してください。');
-      setSnackbarSeverity('error');
-      setOpenSnackbar(true);
-      return;
-    }
-    
-    // 属性値を文字列に変換
-    const processedAttributes = attributes.map(attr => ({
-      ...attr,
-      value: attr.value !== null && attr.value !== undefined ? String(attr.value) : ''
+  const handleAddAttribute = () => {
+    setForm(prev => ({
+      ...prev,
+      attributes: [...prev.attributes, { name: '', value: '', unit: '' }]
     }));
-    
-    const data = {
-      name,
-      type,
-      description,
-      attributes: processedAttributes
-    };
+  };
 
-    console.log('送信データ:', data);
+  const handleAttributeChange = (index, field) => (e) => {
+    setForm(prev => ({
+      ...prev,
+      attributes: prev.attributes.map((attr, i) =>
+        i === index ? { ...attr, [field]: e.target.value } : attr
+      )
+    }));
+  };
+
+  const handleRemoveAttribute = (index) => {
+    setForm(prev => ({
+      ...prev,
+      attributes: prev.attributes.filter((_, i) => i !== index)
+    }));
+  };
+
+  const validate = () => {
+    const newErrors = {};
+    if (!form.name.trim()) newErrors.name = '材料名は必須です';
+    if (!form.category) newErrors.category = 'カテゴリは必須です';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    const data = {
+      ...form,
+      unitCost: form.unitCost ? parseFloat(form.unitCost) : 0,
+      attributes: form.attributes.filter(a => a.name.trim())
+    };
 
     try {
-      let result;
       if (isEditing) {
-        // 更新処理
-        result = updateSubstrateType(id, data);
-        setSnackbarMessage('基質タイプを更新しました。');
+        updateSubstrateType(form.id, data);
+        setSnackbar({ open: true, message: '材料情報を更新しました', severity: 'success' });
       } else {
-        // 新規作成
-        result = saveSubstrateType({
-          ...data,
-          farm_id: 'farm1' // デフォルトファームID
-        });
-        setSnackbarMessage('基質タイプを登録しました。');
+        saveSubstrateType(data);
+        setSnackbar({ open: true, message: '材料を登録しました', severity: 'success' });
       }
-      
-      console.log('基質タイプ操作成功:', result);
-      setSnackbarSeverity('success');
-      setOpenSnackbar(true);
-      resetForm();
-      
-      if (onSubmitSuccess) {
-        onSubmitSuccess();
-      }
-    } catch (error) {
-      console.error('基質タイプ操作エラー:', error);
-      
-      // エラーメッセージ
-      let errorMessage = isEditing ? '基質タイプの更新に失敗しました。' : '基質タイプの登録に失敗しました。';
-      
-      setSnackbarMessage(errorMessage);
-      setSnackbarSeverity('error');
-      setOpenSnackbar(true);
+      setForm(INITIAL_STATE);
+      setIsEditing(false);
+      if (onSubmitSuccess) onSubmitSuccess();
+    } catch (err) {
+      setSnackbar({ open: true, message: '保存に失敗しました', severity: 'error' });
     }
   };
 
-  const handleCancel = () => {
-    resetForm();
-    if (onSubmitSuccess) {
-      onSubmitSuccess();
-    }
-  };
-
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setOpenSnackbar(false);
+  const handleReset = () => {
+    setForm(INITIAL_STATE);
+    setIsEditing(false);
+    setErrors({});
+    if (onSubmitSuccess) onSubmitSuccess();
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 600, margin: 'auto', p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        {isEditing ? '基質タイプ編集' : '基質タイプ登録'}
+    <Box className="section-panel">
+      <Typography className="section-panel__title">
+        {isEditing ? '材料情報 編集' : '材料マスタ 新規登録'}
       </Typography>
-      
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="基質タイプ名"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            error={!!errors.name}
-            helperText={errors.name}
-            onBlur={() => {
-              if (!name.trim()) {
-                setErrors({...errors, name: '基質タイプ名は必須です'});
-              } else if (name.length > 50) {
-                setErrors({...errors, name: '基質タイプ名は50文字以内で入力してください'});
-              } else {
-                setErrors({...errors, name: ''});
-              }
-            }}
-          />
+
+      <form onSubmit={handleSubmit}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth error={!!errors.category} size="small">
+              <InputLabel>カテゴリ</InputLabel>
+              <Select value={form.category} onChange={handleChange('category')} label="カテゴリ">
+                {Object.entries(MATERIAL_CATEGORIES).map(([key, label]) => (
+                  <MenuItem key={key} value={key}>{label}</MenuItem>
+                ))}
+              </Select>
+              {errors.category && <FormHelperText>{errors.category}</FormHelperText>}
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth size="small" label="材料名"
+              value={form.name} onChange={handleChange('name')}
+              error={!!errors.name} helperText={errors.name}
+            />
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              fullWidth size="small" label="説明" multiline rows={2}
+              value={form.description} onChange={handleChange('description')}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth size="small" label="仕入先"
+              value={form.supplier} onChange={handleChange('supplier')}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth size="small" label="単価（円）" type="number"
+              value={form.unitCost} onChange={handleChange('unitCost')}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+              sx={{ '& input': { fontFamily: "'Fira Code', monospace" } }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <FormControl fullWidth size="small">
+              <InputLabel>単位</InputLabel>
+              <Select value={form.unit} onChange={handleChange('unit')} label="単位">
+                <MenuItem value="kg">kg</MenuItem>
+                <MenuItem value="t">t</MenuItem>
+                <MenuItem value="L">L</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
         </Grid>
-        
-        <Grid item xs={12}>
-          <FormControl fullWidth error={!!errors.type}>
-            <InputLabel>基質カテゴリ</InputLabel>
-            <Select
-              value={type}
-              label="基質カテゴリ"
-              onChange={(e) => {
-                setType(e.target.value);
-                if (e.target.value) {
-                  setErrors({...errors, type: ''});
-                }
-              }}
-              required
-            >
-              {SubstrateTypeOptions.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-            {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
-          </FormControl>
-        </Grid>
-        
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="説明"
-            multiline
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </Grid>
-        
-        <Grid item xs={12}>
-          <Typography variant="subtitle1">属性</Typography>
-          {attributes.map((attr, index) => (
+
+        <Box sx={{ mt: 3, mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>
+              属性情報
+            </Typography>
+            <Button size="small" startIcon={<AddIcon />} onClick={handleAddAttribute}>
+              属性追加
+            </Button>
+          </Box>
+
+          {form.attributes.map((attr, index) => (
             <Grid container spacing={1} key={index} sx={{ mb: 1 }}>
               <Grid item xs={4}>
-                <TextField
-                  fullWidth
-                  label="属性名"
-                  value={attr.name}
-                  onChange={(e) => {
-                    updateAttribute(index, 'name', e.target.value);
-                    // 属性名が入力されたら、そのインデックスのエラーをクリア
-                    if (e.target.value.trim() && errors.attributes[index]) {
-                      const newAttributeErrors = [...errors.attributes];
-                      newAttributeErrors[index] = '';
-                      setErrors({...errors, attributes: newAttributeErrors});
-                    }
-                  }}
-                  error={!!errors.attributes[index]}
-                />
+                <TextField fullWidth size="small" placeholder="項目名"
+                  value={attr.name} onChange={handleAttributeChange(index, 'name')} />
               </Grid>
               <Grid item xs={4}>
-                <TextField
-                  fullWidth
-                  label="値"
-                  type="number"
-                  value={attr.value}
-                  onChange={(e) => {
-                    updateAttribute(index, 'value', e.target.value);
-                    // 値が入力されたら、そのインデックスのエラーをクリア
-                    if (e.target.value && errors.attributes[index]) {
-                      const newAttributeErrors = [...errors.attributes];
-                      newAttributeErrors[index] = '';
-                      setErrors({...errors, attributes: newAttributeErrors});
-                    }
-                  }}
-                  error={!!errors.attributes[index]}
-                  helperText={errors.attributes[index]}
-                />
+                <TextField fullWidth size="small" placeholder="値"
+                  value={attr.value} onChange={handleAttributeChange(index, 'value')}
+                  sx={{ '& input': { fontFamily: "'Fira Code', monospace" } }} />
               </Grid>
               <Grid item xs={3}>
-                <TextField
-                  fullWidth
-                  label="単位"
-                  value={attr.unit}
-                  onChange={(e) => updateAttribute(index, 'unit', e.target.value)}
-                />
+                <TextField fullWidth size="small" placeholder="単位"
+                  value={attr.unit} onChange={handleAttributeChange(index, 'unit')} />
               </Grid>
               <Grid item xs={1}>
-                <IconButton onClick={() => removeAttribute(index)}>
-                  <DeleteIcon />
+                <IconButton size="small" onClick={() => handleRemoveAttribute(index)} color="error">
+                  <DeleteIcon fontSize="small" />
                 </IconButton>
               </Grid>
             </Grid>
           ))}
-          
-          <Button 
-            startIcon={<AddIcon />} 
-            onClick={addAttribute}
-            variant="outlined"
-          >
-            属性を追加
-          </Button>
-        </Grid>
-        
-        <Grid item xs={6}>
-          <Button 
-            type="submit" 
-            variant="contained" 
-            color="primary"
-            fullWidth
-          >
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1, mt: 3 }}>
+          <Button type="submit" variant="contained" color="primary">
             {isEditing ? '更新' : '登録'}
           </Button>
-        </Grid>
-        
-        <Grid item xs={6}>
-          <Button 
-            variant="outlined" 
-            color="secondary"
-            fullWidth
-            onClick={handleCancel}
-          >
-            キャンセル
-          </Button>
-        </Grid>
-      </Grid>
-      <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={handleSnackbarClose}>
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
+          <Button variant="outlined" onClick={handleReset}>キャンセル</Button>
+        </Box>
+      </form>
+
+      <Snackbar open={snackbar.open} autoHideDuration={3000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+        <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
       </Snackbar>
     </Box>
   );

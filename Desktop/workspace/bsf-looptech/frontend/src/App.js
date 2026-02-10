@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { 
-  Container, 
-  AppBar, 
-  Toolbar, 
-  Typography, 
-  Tabs, 
-  Tab, 
+import {
+  Container,
+  Typography,
+  Tabs,
+  Tab,
   Box,
   Menu,
   MenuItem,
@@ -15,59 +13,48 @@ import {
   CssBaseline
 } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
-import OceanInspiredHeader from './components/ui/OceanInspiredHeader';
 import theme from './theme/materialTheme';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { OptimizedDataProvider } from './contexts/OptimizedDataContext';
 import LoginForm from './components/auth/LoginForm';
 import PrivateRoute from './components/auth/PrivateRoute';
 import SubstrateTypeForm from './components/substrate/SubstrateTypeForm.js';
 import SubstrateBatchForm from './components/substrate/SubstrateBatchForm.js';
 import SubstrateTypeList from './components/substrate/SubstrateTypeList.js';
 import SubstrateBatchList from './components/substrate/SubstrateBatchList.js';
-import SensorReadingsList from './components/sensors/SensorReadingsList.js';
-import SensorDeviceList from './components/sensors/SensorDeviceList.js';
-import SensorRealTimeDisplay from './components/sensors/SensorRealTimeDisplay.js';
-import SensorChartsRealTime from './components/sensors/SensorChartsRealTime.js';
-import RealTimeDashboard from './components/dashboard/RealTimeDashboard.js';
 import AnalyticsDashboard from './components/analytics/AnalyticsDashboard.js';
 import CorrelationAnalysis from './components/analytics/CorrelationAnalysis.js';
-import AlertSettings from './components/alerts/AlertSettings.js';
-import AlertHistory from './components/alerts/AlertHistory.js';
-import NotificationSettings from './components/alerts/NotificationSettings.js';
-import ThresholdSettings from './components/alerts/ThresholdSettings.js';
-import AlertNotificationCenter from './components/alerts/AlertNotificationCenter.js';
 import BatchComparison from './components/batch/BatchComparison.js';
-import ProfitabilityDashboard from './components/batch/ProfitabilityDashboard.js';
-import FeedEfficiencyTracker from './components/batch/FeedEfficiencyTracker.js';
-import TemperatureSensorDashboard from './components/sensors/TemperatureSensorDashboard.js';
+import { initializeFromApi } from './utils/storage';
 
-// Main Dashboard Component
+
 const Dashboard = () => {
   const [selectedTab, setSelectedTab] = useState(0);
+
+  // Try to sync data from backend API on mount
+  useEffect(() => {
+    initializeFromApi();
+  }, []);
   const [editingSubstrateType, setEditingSubstrateType] = useState(null);
   const [editingSubstrateBatch, setEditingSubstrateBatch] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
-  
+
   const { user, logout } = useAuth();
 
   const handleTabChange = (_, newValue) => {
     setSelectedTab(newValue);
-    // タブ切り替え時に編集状態をリセット
     setEditingSubstrateType(null);
     setEditingSubstrateBatch(null);
   };
 
   const handleEditSubstrateType = (substrateType) => {
     setEditingSubstrateType(substrateType);
-    setSelectedTab(5); // 基質タイプ登録タブに切り替え
+    setSelectedTab(4);
   };
 
   const handleEditSubstrateBatch = (substrateBatch) => {
     setEditingSubstrateBatch(substrateBatch);
-    setSelectedTab(6); // 基質バッチ登録タブに切り替え
+    setSelectedTab(0);
   };
-  
 
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -83,155 +70,116 @@ const Dashboard = () => {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
-      {/* Ocean Inspired Header */}
-      <OceanInspiredHeader />
-      
-      <AppBar position="static" sx={{ background: 'transparent', boxShadow: 'none', mb: 2 }}>
-        <Toolbar sx={{ justifyContent: 'flex-end', minHeight: '48px !important' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="body2" sx={{ mr: 2, color: '#64748b' }}>
-              {user?.username} ({user?.role})
-            </Typography>
-            <IconButton
-              size="large"
-              edge="end"
-              aria-label="account of current user"
-              aria-controls="menu-appbar"
-              aria-haspopup="true"
-              onClick={handleMenuOpen}
-              sx={{ color: '#64748b' }}
-            >
-              <AccountCircle />
-            </IconButton>
-            <Menu
-              id="menu-appbar"
-              anchorEl={anchorEl}
-              anchorOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-              keepMounted
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-              open={Boolean(anchorEl)}
-              onClose={handleMenuClose}
-            >
-              <MenuItem onClick={handleMenuClose}>Profile</MenuItem>
-              <MenuItem onClick={handleLogout}>Logout</MenuItem>
-            </Menu>
-          </Box>
-        </Toolbar>
-      </AppBar>
-      
-      <Box className="ocean-tabs" sx={{ mt: 2 }}>
-        <Tabs 
-          value={selectedTab} 
-          onChange={handleTabChange} 
-          variant="scrollable" 
+    <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4 } }}>
+      {/* Dashboard Header */}
+      <Box className="dashboard-header">
+        <Box>
+          <Typography className="dashboard-header__title" component="h1">
+            BSF-LoopTech
+          </Typography>
+          <Typography className="dashboard-header__subtitle">
+            廃棄物処理配合最適化システム
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography
+            variant="body2"
+            sx={{ mr: 1, color: 'text.secondary', fontFamily: "'Fira Sans', sans-serif" }}
+          >
+            {user?.username}
+          </Typography>
+          <IconButton
+            size="small"
+            aria-label="ユーザーメニュー"
+            aria-controls="menu-appbar"
+            aria-haspopup="true"
+            onClick={handleMenuOpen}
+            sx={{ color: 'text.secondary' }}
+          >
+            <AccountCircle />
+          </IconButton>
+          <Menu
+            id="menu-appbar"
+            anchorEl={anchorEl}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            keepMounted
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            open={Boolean(anchorEl)}
+            onClose={handleMenuClose}
+          >
+            <MenuItem onClick={handleLogout}>ログアウト</MenuItem>
+          </Menu>
+        </Box>
+      </Box>
+
+      {/* Tab Navigation — MASTER.md 5-tab structure */}
+      <Box className="industrial-tabs">
+        <Tabs
+          value={selectedTab}
+          onChange={handleTabChange}
+          variant="scrollable"
           scrollButtons="auto"
-          sx={{
-            '& .MuiTabs-indicator': {
-              display: 'none'
-            }
-          }}
         >
-          <Tab label="リアルタイムダッシュボード" />
-          <Tab label="ライブセンサー監視" />
-          <Tab label="リアルタイムチャート" />
-          <Tab label="アナリティクス" />
-          <Tab label="相関分析" />
-          <Tab label="基質タイプ登録" />
-          <Tab label="基質バッチ登録" />
-          <Tab label="基質タイプ一覧" />
-          <Tab label="基質バッチ一覧" />
-          <Tab label="センサーデータ" />
-          <Tab label="センサーデバイス" />
-          <Tab label="閾値設定" />
-          <Tab label="アラート通知" />
-          <Tab label="アラート設定" />
-          <Tab label="アラート履歴" />
-          <Tab label="通知設定" />
-          <Tab label="バッチ比較" />
-          <Tab label="収益性分析" />
-          <Tab label="飼料効率追跡" />
-          <Tab label="温度センサー監視" />
+          <Tab label="搬入管理" />
+          <Tab label="配合管理" />
+          <Tab label="分析ダッシュボード" />
+          <Tab label="品質管理" />
+          <Tab label="マスタ管理" />
         </Tabs>
       </Box>
-      
+
+      {/* Tab 0: 搬入管理 — 搬入予定、分析結果入力、履歴 */}
       {selectedTab === 0 && (
-        <RealTimeDashboard />
+        <Box>
+          {editingSubstrateBatch ? (
+            <SubstrateBatchForm
+              initialData={editingSubstrateBatch}
+              onSubmitSuccess={() => setEditingSubstrateBatch(null)}
+            />
+          ) : (
+            <SubstrateBatchList onEdit={handleEditSubstrateBatch} />
+          )}
+        </Box>
       )}
+
+      {/* Tab 1: 配合管理 — 固化剤・溶出抑制材の配合レシピ、AI推奨 */}
       {selectedTab === 1 && (
-        <SensorRealTimeDisplay farmId="farm1" />
+        <Box>
+          <BatchComparison />
+        </Box>
       )}
+
+      {/* Tab 2: 分析ダッシュボード — 相関グラフ、統計、トレンド */}
       {selectedTab === 2 && (
-        <SensorChartsRealTime />
+        <Box>
+          <CorrelationAnalysis />
+        </Box>
       )}
+
+      {/* Tab 3: 品質管理 — 規制基準チェック、合否判定履歴 */}
       {selectedTab === 3 && (
-        <AnalyticsDashboard />
+        <Box>
+          <AnalyticsDashboard />
+        </Box>
       )}
+
+      {/* Tab 4: マスタ管理 — 材料マスタ、基準値設定 */}
       {selectedTab === 4 && (
-        <CorrelationAnalysis />
-      )}
-      {selectedTab === 5 && (
-        <SubstrateTypeForm 
-          initialData={editingSubstrateType} 
-          onSubmitSuccess={() => setEditingSubstrateType(null)} 
-        />
-      )}
-      {selectedTab === 6 && (
-        <SubstrateBatchForm 
-          initialData={editingSubstrateBatch} 
-          onSubmitSuccess={() => setEditingSubstrateBatch(null)} 
-        />
-      )}
-      {selectedTab === 7 && (
-        <SubstrateTypeList onEdit={handleEditSubstrateType} />
-      )}
-      {selectedTab === 8 && (
-        <SubstrateBatchList onEdit={handleEditSubstrateBatch} />
-      )}
-      {selectedTab === 9 && (
-        <SensorReadingsList />
-      )}
-      {selectedTab === 10 && (
-        <SensorDeviceList />
-      )}
-      {selectedTab === 11 && (
-        <ThresholdSettings />
-      )}
-      {selectedTab === 12 && (
-        <AlertNotificationCenter />
-      )}
-      {selectedTab === 13 && (
-        <AlertSettings />
-      )}
-      {selectedTab === 14 && (
-        <AlertHistory />
-      )}
-      {selectedTab === 15 && (
-        <NotificationSettings />
-      )}
-      {selectedTab === 16 && (
-        <BatchComparison />
-      )}
-      {selectedTab === 17 && (
-        <ProfitabilityDashboard />
-      )}
-      {selectedTab === 18 && (
-        <FeedEfficiencyTracker />
-      )}
-      {selectedTab === 19 && (
-        <TemperatureSensorDashboard farmId="farm-001" />
+        <Box>
+          {editingSubstrateType ? (
+            <SubstrateTypeForm
+              initialData={editingSubstrateType}
+              onSubmitSuccess={() => setEditingSubstrateType(null)}
+            />
+          ) : (
+            <SubstrateTypeList onEdit={handleEditSubstrateType} />
+          )}
+        </Box>
       )}
     </Container>
   );
 };
 
-// Main App Component with Routing
 const App = () => {
   return (
     <ThemeProvider theme={theme}>
@@ -240,15 +188,13 @@ const App = () => {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<LoginForm />} />
-            <Route 
-              path="/" 
+            <Route
+              path="/"
               element={
                 <PrivateRoute>
-                  <OptimizedDataProvider>
-                    <Dashboard />
-                  </OptimizedDataProvider>
+                  <Dashboard />
                 </PrivateRoute>
-              } 
+              }
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
