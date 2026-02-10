@@ -1,27 +1,26 @@
-fastapi[websockets]>=0.115.0
+# Core
+fastapi>=0.115.0
 uvicorn[standard]
-websockets
-influxdb-client
-paho-mqtt
 python-dotenv
+pydantic>=2.7.0
+pydantic-settings
+
+# PostgreSQL + ORM
+sqlalchemy>=2.0.0
+asyncpg
+alembic
+psycopg2-binary
+
+# Authentication
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+email-validator
+httpx
+
+# AI recommendation engine
 pandas
 numpy
 scipy
 scikit-learn
 requests
-pydantic>=2.7.0
-pydantic-settings
-# PostgreSQL and SQLAlchemy dependencies
-sqlalchemy>=2.0.0
-asyncpg
-alembic
-psycopg2-binary
-# JWT authentication and security dependencies
-python-jose[cryptography]
-passlib[bcrypt]
-python-multipart
-email-validator
-# HTTP client for JWKS fetching (Supabase JWT validation)
-httpx
-# Prometheus client for monitoring (optional, add later if needed)
-# prometheus-fastapi-instrumentator

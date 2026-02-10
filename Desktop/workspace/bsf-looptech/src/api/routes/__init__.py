@@ -1,3 +1,1 @@
-"""
-API routes for BSF Larvae Monitoring System.
-"""
+"""API routes for BSF-LoopTech waste treatment system."""

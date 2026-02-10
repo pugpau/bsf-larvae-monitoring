@@ -1,12 +1,16 @@
+"""
+Application settings for BSF-LoopTech waste treatment system.
+"""
+
 import os
-from dotenv import load_dotenv
 from typing import Optional
 
-# Load .env.local file from the root directory
-dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env.local')
+from dotenv import load_dotenv
+
+# Load .env.local, fallback to .env
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env.local")
 if not os.path.exists(dotenv_path):
-    # Fallback to .env if .env.local doesn't exist
-    dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+    dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 load_dotenv(dotenv_path=dotenv_path)
 
 
@@ -14,23 +18,7 @@ class Settings:
     """Application settings loaded from environment variables."""
 
     def __init__(self):
-        # MQTT Settings
-        self.MQTT_BROKER_HOST: str = os.getenv("MQTT_BROKER_HOST", "localhost")
-        self.MQTT_BROKER_PORT: int = int(os.getenv("MQTT_BROKER_PORT", "1883"))
-        self.MQTT_USERNAME: Optional[str] = os.getenv("MQTT_USERNAME")
-        self.MQTT_PASSWORD: Optional[str] = os.getenv("MQTT_PASSWORD")
-        self.MQTT_TLS_ENABLED: bool = os.getenv("MQTT_TLS_ENABLED", "false").lower() in ("true", "1", "yes")
-        self.MQTT_CA_CERTS: Optional[str] = os.getenv("MQTT_CA_CERTS")
-        self.MQTT_CLIENT_CERT: Optional[str] = os.getenv("MQTT_CLIENT_CERT")
-        self.MQTT_CLIENT_KEY: Optional[str] = os.getenv("MQTT_CLIENT_KEY")
-
-        # InfluxDB Settings
-        self.INFLUXDB_URL: str = os.getenv("INFLUXDB_URL", "http://localhost:8086")
-        self.INFLUXDB_TOKEN: str = os.getenv("INFLUXDB_TOKEN", "default_token")
-        self.INFLUXDB_ORG: str = os.getenv("INFLUXDB_ORG", "default_org")
-        self.INFLUXDB_BUCKET: str = os.getenv("INFLUXDB_BUCKET", "bsf_data")
-
-        # PostgreSQL Settings
+        # PostgreSQL
         self.POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
         self.POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
         self.POSTGRES_USER: str = os.getenv("POSTGRES_USER", "bsf_user")
@@ -38,27 +26,14 @@ class Settings:
         self.POSTGRES_DB: str = os.getenv("POSTGRES_DB", "bsf_system")
         self.DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
 
-        # API Settings
-        self.ERP_API_ENDPOINT: Optional[str] = os.getenv("ERP_API_ENDPOINT")
-        self.ERP_API_KEY: Optional[str] = os.getenv("ERP_API_KEY")
-
-        # Application Settings
-        self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+        # Security
         self.SECRET_KEY: str = os.getenv("SECRET_KEY", "default_secret_key")
+        self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-        # Control System Settings
-        self.CONTROL_SYSTEM_API_ENDPOINT: Optional[str] = os.getenv("CONTROL_SYSTEM_API_ENDPOINT")
-        self.CONTROL_SYSTEM_API_KEY: Optional[str] = os.getenv("CONTROL_SYSTEM_API_KEY")
-
-        # Supabase Settings (for JWKS JWT validation)
-        self.SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
-        self.SUPABASE_JWT_SECRET: Optional[str] = os.getenv("SUPABASE_JWT_SECRET")
-        self.SUPABASE_ANON_KEY: Optional[str] = os.getenv("SUPABASE_ANON_KEY")
-
-        # CORS Settings (comma-separated list of allowed origins)
+        # CORS (comma-separated origins)
         self.CORS_ORIGINS: str = os.getenv(
             "CORS_ORIGINS",
-            "http://localhost:3000,http://localhost:3001"
+            "http://localhost:3000,http://localhost:3001",
         )
 
         # Construct DATABASE_URL if not provided
@@ -69,12 +44,4 @@ class Settings:
             )
 
 
-# Instantiate settings
 settings = Settings()
-
-# Example usage (can be removed later)
-if __name__ == "__main__":
-    print("MQTT Broker Host:", settings.MQTT_BROKER_HOST)
-    print("InfluxDB URL:", settings.INFLUXDB_URL)
-    print("InfluxDB Org:", settings.INFLUXDB_ORG)
-    print("Log Level:", settings.LOG_LEVEL)

@@ -11,12 +11,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.postgresql import get_async_session
-from src.auth.security import verify_token, SecurityHeaders
+from src.auth.security import verify_token, SecurityHeaders, SKIP_AUTH
 from src.auth.repository import UserRepository, SessionRepository, APIKeyRepository
 from src.auth.models import User, Permission
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+if SKIP_AUTH:
+    logger.warning("SKIP_AUTH is enabled — authentication middleware will pass all requests")
 
 # HTTP Bearer for API key authentication
 api_key_bearer = HTTPBearer(auto_error=False)
@@ -45,10 +48,15 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request through authentication middleware."""
         start_time = time.time()
-        
+
         try:
             # Skip authentication for exempt paths
             if self._is_exempt_path(request.url.path):
+                response = await call_next(request)
+                return self._add_security_headers(response)
+
+            # Development mode — bypass authentication entirely
+            if SKIP_AUTH:
                 response = await call_next(request)
                 return self._add_security_headers(response)
             
