@@ -152,3 +152,55 @@ if ! command -v gemini &> /dev/null; then
     exit 1
 fi
 ```
+
+# UI/UX PRO MAX 必須使用ルール
+
+## 目的
+フロントエンド開発時に、UI/UX PRO MAXスキルを必ず使用してプロフェッショナルなUIを実現する。
+
+## 適用タイミング
+以下の作業を行う際は **必ず** `ui-ux-pro-max` スキルを適用する：
+- 新規UIコンポーネント・ページの作成
+- 既存UIの改修・リデザイン
+- カラーパレット・タイポグラフィの選定
+- ダッシュボード・管理画面の構築
+- レスポンシブデザインの実装
+- アクセシビリティ対応
+
+## ワークフロー
+
+### Step 1: デザインシステム生成（初回 or 大きな変更時）
+```bash
+python3 skills/ui-ux-pro-max/scripts/search.py "<product_type> <keywords>" --design-system --persist -p "BSF-LoopTech"
+```
+
+### Step 2: 詳細検索（必要に応じて）
+```bash
+# スタイル検索
+python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain style
+# UXガイドライン
+python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain ux
+# チャート推奨
+python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain chart
+```
+
+### Step 3: スタック別ガイドライン（React + MUI）
+```bash
+python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --stack react
+```
+
+## 本プロジェクト固有のデザイン仕様
+- **スタック**: React 18 + MUI v5
+- **プライマリカラー**: #1E40AF (Blue)
+- **フォント**: Fira Sans (見出し) + Fira Code (データ/コード)
+- **5タブ構造**: 搬入管理, 配合管理, 分析ダッシュボード, 品質管理, マスタ管理
+- **対象**: 産業廃棄物処理の専門オペレータ向け管理画面
+
+## 納品前チェックリスト
+- [ ] 絵文字をアイコンとして未使用（SVGアイコンを使用）
+- [ ] すべてのクリック要素に `cursor: pointer`
+- [ ] ホバー状態でレイアウトシフトなし
+- [ ] ライト/ダークモードで十分なコントラスト
+- [ ] レスポンシブ対応（375px, 768px, 1024px, 1440px）
+- [ ] アクセシビリティ（alt text, aria-label, keyboard nav）
+- [ ] トランジション 150-300ms

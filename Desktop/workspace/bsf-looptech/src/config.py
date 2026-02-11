@@ -36,6 +36,13 @@ class Settings:
             "http://localhost:3000,http://localhost:3001",
         )
 
+        # ML model registry
+        self.MODEL_REGISTRY_PATH: str = os.getenv("MODEL_REGISTRY_PATH", "model_registry/models")
+
+        # LLM (LM Studio)
+        self.LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1")
+        self.LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
+
         # Construct DATABASE_URL if not provided
         if not self.DATABASE_URL:
             self.DATABASE_URL = (

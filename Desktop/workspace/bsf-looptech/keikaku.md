@@ -63,42 +63,76 @@
 
 ---
 
-## 現状分析（2026-02-10時点）
+## 現状分析（2026-02-11 更新）
 
-### 完了済みフェーズ（Phase 1〜7）
+### 完了済み準備フェーズ（Phase 0-1〜0-7）
 
 | # | フェーズ | 状態 | 備考 |
 |---|---------|------|------|
-| 1 | 死コード削除（Bootstrap/IoT） | 完了 | -20,218行 |
-| 2 | バックエンドAPI接続 | 完了 | WasteRecord/MaterialType |
-| 3 | AI配合最適化 | 完了 | similarity + rule-based |
-| 4 | バックエンド死コード完全削除 | 完了 | 120→22ファイル |
-| 5 | Alembicマイグレーション | 完了 | 6テーブル |
-| 6 | テストスイート | 完了 | 52テスト全パス |
-| 7 | 認証+Docker整理 | 完了 | JWT + 3サービス構成 |
+| 0-1 | 死コード削除（Bootstrap/IoT） | 完了 | -20,218行 |
+| 0-2 | バックエンドAPI接続 | 完了 | WasteRecord/MaterialType |
+| 0-3 | AI配合最適化 | 完了 | similarity + rule-based |
+| 0-4 | バックエンド死コード完全削除 | 完了 | 120→22ファイル |
+| 0-5 | Alembicマイグレーション | 完了 | 6テーブル |
+| 0-6 | テストスイート | 完了 | 52テスト全パス |
+| 0-7 | 認証+Docker整理 | 完了 | JWT + 3サービス構成 |
 
-### 未コミット作業（進行中）
+### Phase 1 進捗（基本DBシステム構築）
 
-- **死コード削除 Phase 8**: sensors, alerts, analytics, MQTT, WebSocket, InfluxDB (-25,506行、60ファイル)
-- **UI/UX改善**: App.js（13→5タブ化）、index.css（Fira Sans/Code導入）、substrate コンポーネントリファクタ
+| タスク | 状態 | 備考 |
+|--------|------|------|
+| Phase 1-1: 未コミット変更整理 [SD-2] | **完了** | 2段階コミット実施 |
+| Phase 1-2: TypeScript段階的移行 [SD-1] | **完了** | tsconfig.json + allowJs:true |
+| Phase 1-3: DBスキーマ3マイグレーション [SD-3] | **完了** | 5テーブル追加（suppliers, solidification_materials, leaching_suppressants, recipes, recipe_details） |
+| Phase 1-4: CRUD API | **完了** | 29エンドポイント（suppliers 5 + solidification 5 + suppressants 5 + recipes 7 + waste 7） |
+| Phase 1-5: フロントエンド | **完了** | 8 TSXファイル + App.js統合、ビルド検証済 |
+| Phase 1-6: テスト 80%カバレッジ | **完了** | 284テスト全パス、カバレッジ80%達成 |
+| Phase 1-7: ML学習データ要件定義 | **完了** | `docs/ML_TRAINING_DATA_REQUIREMENTS.md` |
+
+### カバレッジ詳細（2026-02-10 更新）
+
+| モジュール | カバレッジ | 備考 |
+|-----------|----------|------|
+| materials/schemas.py | 100% | 完全 |
+| materials/repository.py | 71% | エラーパス未テスト |
+| api/routes/materials.py | 64% | エラーハンドリング未テスト |
+| waste/recommender.py | 97% | ほぼ完全 |
+| waste/models.py | 100% | 完全 |
+| waste/service.py | 100% | 完全 |
+| waste/repository.py | 81% | CRUD全パターン |
+| auth/models.py | 97% | ほぼ完全 |
+| auth/repository.py | 72% | CRUD + 認証 + APIKey |
+| auth/service.py | 80% | Authentication + UserManagement + Security + APIKey |
+| auth/security.py | 74% | JWT + パスワード + マスキング |
+| auth/middleware.py | 49% | exempt_paths + rate limit + CORS |
+| utils/logging.py | 96% | StructuredFormatter + decorators |
+| database/exceptions.py | 100% | 全7例外クラス |
+| **全体** | **80%** | 目標達成（284テスト） |
 
 ### 現在のスタック
 
 | 層 | 技術 | バージョン |
 |---|------|----------|
-| Frontend | React + MUI v5 | 18.x (JavaScript) |
+| Frontend | React + MUI v5 | 18.x (JS/TSX混在) |
 | Backend | FastAPI + SQLAlchemy async | 0.100+ / 2.0 |
-| DB | PostgreSQL | 14 |
+| DB | PostgreSQL | 15（13テーブル: 既存11 + ml_models + ml_predictions） |
 | Auth | JWT + API Key + RBAC | bcrypt |
-| AI | similarity + rule-based | 自前実装 |
-| Infra | Docker Compose | 3サービス構成 |
-| Test | pytest + pytest-asyncio | 52テスト |
+| AI/ML | scikit-learn RF + PuLP最適化 + similarity/rule fallback | Phase 3完了 |
+| Infra | Docker Compose (Blue-Green) | 5サービス構成 (prod) |
+| Test | pytest + pytest-asyncio + pytest-cov | 448テスト / 80%+カバレッジ |
 
-### 現在のDB構造（6テーブル）
+### 現在のDB構造（11テーブル）
 
 ```
-users, sessions, login_attempts, api_keys
+# 認証系
+users, user_sessions, login_attempts, api_keys
+
+# 廃棄物管理
 waste_records, material_types
+
+# Phase 1 拡張（マスタ・配合管理）
+suppliers, solidification_materials, leaching_suppressants
+recipes, recipe_details
 ```
 
 ---
@@ -107,39 +141,45 @@ waste_records, material_types
 
 ```
 2026年
- 3月  Phase 1-A: 未コミット整理 + DB設計 + Alembicマイグレーション
-      ├── [SD-2] 2段階コミット（死コード削除 → UI/UX改善）
-      ├── [SD-1] tsconfig.json + allowJs 設定
-      ├── [SD-3] Migration 1: suppliers + materials拡張
-      └── [SD-3] Migration 2: solidification_materials + leaching_suppressants
+ 2月  Phase 1-A/B: ★前倒し完了★
+      ├── [SD-2] 2段階コミット ✅
+      ├── [SD-1] tsconfig.json + allowJs 設定 ✅
+      ├── [SD-3] 3マイグレーション（5テーブル追加） ✅
+      ├── CRUD API 29エンドポイント ✅
+      ├── フロントエンド8 TSXコンポーネント ✅
+      └── 284テスト全パス（カバレッジ80%達成） ✅
 
- 4月  Phase 1-B: CRUD API + フロントエンド
-      ├── suppliers/materials/recipes CRUD API
-      ├── [SD-3] Migration 3: recipes + recipe_details
-      ├── 5タブ内のUI構築（新規コンポーネントはTSX）
-      └── [SD-5] ML学習データ要件定義（0.5人日、Phase 3準備）
-           └── waste_recordsに必要な特徴量の洗い出し
+ 2月  Phase 1 全完了 ✅
+      └── Phase 1-7: ML学習データ要件定義 ✅
 
- 5月  Phase 2: マスタデータ拡張
-      ├── 複合条件検索（ts_vector/ts_query）
-      ├── CSV/Excelインポート・エクスポート
-      ├── Blue-Greenデプロイ基盤
-      └── [SD-4][SD-5] pgvector検証 + LLMベンチマーク（1-2日）
-           ├── docker-compose.yml に pgvector/pgvector:pg14 追加
-           └── LM Studio + openai/gpt-oss-20b 推論速度・メモリ測定
+ 2月  Phase 2 早期着手 ✅
+      ├── Phase 2-1: 検索・ページネーション・CSV入出力 バックエンド ✅
+      └── Phase 2-4: フロントエンドUI改善（検索・ページネーション・CSV） ✅
 
- 6月  Phase 3-A: MLパイプライン
-      ├── scikit-learn Random Forest モデル構築
-      ├── 特徴量エンジニアリング（汚泥種類、水分率、重金属、pH）
-      └── モデルバージョニング（joblib）
+ 2月  Phase 3 ★前倒し完了★ ✅
+      ├── Phase 3-1: MLパイプライン基盤（scikit-learn/joblib/PuLP） ✅
+      ├── Phase 3-2: MLパイプライン（7ファイル: trainer, predictor, etc.） ✅
+      ├── Phase 3-3: 予測API（7エンドポイント） ✅
+      ├── Phase 3-4: PuLP最適化エンジン ✅
+      ├── Phase 3-5: フロントエンド（4 TSXコンポーネント） ✅
+      └── Phase 3-6: テスト（351→442テスト） ✅
 
- 7月  Phase 3-B + Phase 4-A（PuLP前倒し）
-      ├── 統計ダッシュボード（Recharts）
-      ├── 予測API（/api/v1/predict/formulation, /elution）
-      └── [SD-5] PuLP最適化エンジン（Phase 4から前倒し）
-           ├── 目的関数: コスト最小化
-           ├── 制約: 溶出基準、強度基準、材料在庫
-           └── API: POST /api/v1/optimize/formulation
+ 2月  本番デプロイ基盤 ★前倒し完了★ ✅
+      ├── CI/CD（4 Jobs: test, build, security, docker） ✅
+      └── Blue-Green ゼロダウンタイムデプロイ ✅
+           ├── docker-compose.prod.yml（5サービス） ✅
+           ├── deploy-blue-green.sh（init/deploy/rollback/status） ✅
+           └── /ready プローブ + pool_size最適化 ✅
+
+ 2月  Phase 2-6: [SD-4][SD-5] pgvector検証 + LLMベンチマーク ✅
+      ├── pgvector/pgvector:pg14(dev)/pg15(prod) Docker切替 ✅
+      ├── pgvector vector(384) cosine distance 動作確認 ✅
+      ├── LM Studio gpt-oss-20b ~45 tok/s ベンチマーク ✅
+      ├── LangChain ChatOpenAI 統合テスト ✅
+      ├── nomic-embed-text-v1.5 (dim=768) embedding確認 ✅
+      └── メモリ: LM Studio ~25GB, 残り ~8GB/32GB ✅
+
+ ─── ここから未着手 ───
 
  8月  Phase 4-B: RAG + LLMチャット（PuLP完了済み、LLMに集中）
       ├── [SD-4] LangChain + embedding パイプライン
@@ -154,21 +194,22 @@ waste_records, material_types
       └── 受入テスト + 運用マニュアル
 
  9/30 ──────────────────── 納品期限
+
+ ★ Phase 3 + CI/CD + Blue-Green が4ヶ月前倒し完了。
+   バッファ 2.0人月 → 4.0+人月に拡大。Phase 4 LLMリスクに余裕あり。
 ```
 
 ---
 
-## Phase 0: 即時アクション（Phase 1開始前）
+## Phase 0: 即時アクション（Phase 1開始前）— **全完了**
 
-Phase 1 開始前に完了すべき作業:
-
-| # | アクション | 所要時間 | 対応SD |
-|---|-----------|---------|--------|
-| 1 | 死コード削除のコミット（-25,506行） | 1時間 | SD-2 |
-| 2 | `pytest` 52テスト全パス確認 | 10分 | SD-2 |
-| 3 | UI/UX改善のコミット + `OptimizedDataContext.js` 削除 | 1時間 | SD-2 |
-| 4 | `npm start` フロントエンド動作確認 | 30分 | SD-2 |
-| 5 | `plan.md` の削除（本計画書に置換） | 5分 | - |
+| # | アクション | 状態 | 対応SD |
+|---|-----------|------|--------|
+| 1 | 死コード削除のコミット（-25,506行） | **完了** | SD-2 |
+| 2 | `pytest` テスト全パス確認 | **完了**（77テスト） | SD-2 |
+| 3 | UI/UX改善のコミット + `OptimizedDataContext.js` 削除 | **完了** | SD-2 |
+| 4 | `npm run build` フロントエンド動作確認 | **完了** | SD-2 |
+| 5 | `plan.md` の削除（本計画書に置換） | **完了** | - |
 
 ---
 
@@ -249,24 +290,27 @@ Phase1-7: [SD-5] ML学習データ要件定義（4月末、0.5人日）
 #### タスク一覧
 
 ```
-Phase2-1: 高度検索・フィルタAPI
-  - 複合条件検索（材料名、カテゴリ、pH範囲、コスト範囲）
-  - 全文検索（PostgreSQL ts_vector/ts_query）
-  - ページネーション（カーソルベース）
-Phase2-2: データインポート/エクスポート
-  - CSV/Excelインポート（pandas + openpyxl）
-  - テンプレートダウンロード
-  - バリデーション付きバルクインサート
-Phase2-3: Blue-Greenデプロイ基盤
+Phase2-1: 高度検索・フィルタAPI ✅
+  - ILIKE テキスト検索（エンティティごとに検索カラム設定可能）
+  - オフセットベースページネーション（PaginatedResponse<T>）
+  - ソート（sort_by, sort_order）、フィルタ（status, material_type等）
+Phase2-2: データインポート/エクスポート ✅（Phase 2-1と統合実施）
+  - CSV エクスポート（BOM付きUTF-8、Excel対応）
+  - CSV インポート（行バリデーション付き、ImportResult返却）
+  - 3エンティティ対応（suppliers, solidification_materials, leaching_suppressants）
+Phase2-3: Blue-Greenデプロイ基盤 → Phase 5に延期
   - Docker Compose プロファイル（blue/green）
   - Alembic online migration 対応
   - ヘルスチェック強化
-Phase2-4: UI改善
-  - データテーブル高度化（ソート、フィルタ、ページング）
-  - フォームバリデーション強化
-Phase2-5: テスト拡充
-  - インポート/エクスポートのE2Eテスト
-  - 検索パフォーマンステスト
+Phase2-4: UI改善 ✅
+  - 検索バー（テキスト入力 + ステータスフィルタ）
+  - MUI TablePagination（25/50/100件、日本語ラベル）
+  - CSVエクスポート/インポートボタン（全4リスト画面）
+  - PaginatedResponse対応（materialsApi.ts + types/api.ts）
+Phase2-5: テスト拡充 ✅
+  - Unit: リポジトリ検索・ページネーション・ソート・エクスポート（39テスト）
+  - Integration: 検索・CSV export/import・ラウンドトリップ（28テスト）
+  - 合計 351テスト（284→351, +67テスト追加）
 Phase2-6: [SD-4][SD-5] Phase 4早期検証（5月末、1-2日）
   - docker-compose.yml に pgvector/pgvector:pg14 追加・テスト
   - LM Studio + openai/gpt-oss-20b ベンチマーク（推論速度、メモリ消費）
@@ -276,7 +320,7 @@ Phase2-6: [SD-4][SD-5] Phase 4早期検証（5月末、1-2日）
 
 ---
 
-### Phase 3: ML予測・統計分析（6月〜7月 / 4.3人月 → 見込み3.8人月）
+### Phase 3: ML予測・統計分析（6月〜7月 / 4.3人月 → 実績: 2月完了 ★4ヶ月前倒し★）
 
 #### 目標
 scikit-learn Random Forestによる配合予測、統計ダッシュボード、PuLP前倒し
@@ -284,31 +328,26 @@ scikit-learn Random Forestによる配合予測、統計ダッシュボード、
 #### タスク一覧
 
 ```
-Phase3-1: MLパイプライン構築（6月）
-  - scikit-learn Random Forest モデル
-  - 特徴量: 汚泥種類、水分率、重金属濃度、pH
-  - 目標変数: 固化材配合率、抑制剤添加量
-  - 現行recommender.py（similarity + rule-based）をMLモデルに段階的置換
-Phase3-2: モデル管理（6月）
-  - モデルバージョニング（joblib保存）
-  - 学習データ管理
-  - 再学習パイプライン
-Phase3-3: 統計ダッシュボード（7月前半）
-  - 分析ダッシュボードタブの機能強化
-  - グラフ: Recharts
-  - KPI表示: 配合成功率、溶出基準達成率
-Phase3-4: 予測API（7月前半）
-  - POST /api/v1/predict/formulation
-  - POST /api/v1/predict/elution
-  - モデルメタデータ取得API
-Phase3-5: [SD-5] PuLP最適化エンジン（7月後半、Phase 4から前倒し）
+Phase3-1: MLパイプライン基盤 ✅（2月完了）
+  - scikit-learn/joblib/imbalanced-learn/pulp 導入
+  - MLModel/MLPrediction テーブル + Alembic migration
+Phase3-2: MLパイプライン ✅（2月完了）
+  - src/ml/ 7ファイル: schemas, data_pipeline, feature_engineering,
+    synthetic_data, trainer, model_registry, predictor
+  - RandomForest classifier + regressor, SMOTE, 5-fold CV
+  - ML→similarity→rule フォールバックチェーン
+Phase3-3: 予測API ✅（2月完了）
+  - 7エンドポイント: predict/formulation, predict/elution,
+    ml/models, ml/train, ml/accuracy, ml/trends
+Phase3-4: PuLP最適化エンジン ✅（2月完了）
+  - src/optimization/ 3ファイル: constraints, solver + API route
   - 目的関数: コスト最小化
   - 制約: 溶出基準、強度基準、材料在庫
-  - API: POST /api/v1/optimize/formulation
-Phase3-6: テスト
-  - モデル精度テスト（交差検証）
-  - 予測APIの統合テスト
-  - 最適化結果の妥当性テスト
+Phase3-5: フロントエンド ✅（2月完了）
+  - 4 TSX: MLPredictionPanel, OptimizationPanel, TrendAnalysis, PredictionAccuracy
+  - apiClient.js ML API統合
+Phase3-6: テスト ✅（2月完了）
+  - 442テスト（+62 ML unit + 21 optimization unit + 19 integration）
 ```
 
 #### 既存資産の活用
@@ -352,8 +391,8 @@ Phase4-4: テスト
 | リスク | 影響度 | 対策 | 状態 |
 |--------|--------|------|------|
 | gpt-oss-20bインフラ | ~~高~~ → **解消** | LM Studio経由でローカル提供確定 | 解消 |
-| Mac miniでのgpt-oss-20b推論性能 | 中 | [SD-5] 5月末にLM Studioで実機ベンチマーク | 5月検証 |
-| pgvector導入工数 | 中 | [SD-5] 5月末に事前検証予定 | 5月検証 |
+| Mac miniでのgpt-oss-20b推論性能 | ~~中~~ → **解消** | ~45tok/s ベンチマーク完了 | 解消 |
+| pgvector導入工数 | ~~中~~ → **解消** | vector v0.8.1 動作確認済み | 解消 |
 | Phase 4工数不足 | **高** → 低 | [SD-5] PuLP前倒し + LLMインフラ確定で大幅軽減 | 軽減済み |
 
 #### Mac mini メモリ配分計画 [SD-4]
@@ -401,16 +440,17 @@ Phase5-4: 受入テスト
 
 ## 工数見積もり（最適化後）
 
-| フェーズ | 提案書 | 最適化後見込み | 差分 | 備考 |
+| フェーズ | 提案書 | 最適化後見込み | 実績 | 備考 |
 |---------|--------|--------------|------|------|
-| Phase 1 | 5.5人月 | 4.5人月 | **-1.0** | 既存資産活用で短縮 |
-| Phase 2 | 2.9人月 | 2.7人月 | -0.2 | PostgreSQL組み込み検索で効率化 |
-| Phase 3 | 4.3人月 | 3.8人月 | **-0.5** | recommender.py活用 + PuLP前倒し |
-| Phase 4 | 4.6人月 | 4.5人月 | -0.1 | PuLP前倒し済み、LLMに集中 |
-| Phase 5 | 2.9人月 | 2.7人月 | -0.2 | バッチ設計の早期開始 |
-| **合計** | **20.2人月** | **18.2人月** | **-2.0** | バッファをPhase 4 LLMリスクに充当 |
+| Phase 1 | 5.5人月 | 4.5人月 | **完了** | 2月完了、既存資産活用 |
+| Phase 2 | 2.9人月 | 2.7人月 | **完了** | 2月全完了（2-6含む） |
+| Phase 3 | 4.3人月 | 3.8人月 | **完了** | 2月完了★4ヶ月前倒し |
+| CI/CD+BG | - | - | **完了** | Phase 4(CI/CD) + Blue-Green |
+| Phase 4 | 4.6人月 | 4.5人月 | 未着手 | RAG + LLM（8月予定） |
+| Phase 5 | 2.9人月 | 2.7人月 | 未着手 | バッチ + KPI + 本番（9月予定） |
+| **合計** | **20.2人月** | **18.2人月** | | |
 
-**バッファ: 2.0人月** → Phase 4のLLMインフラ問題発生時に充当可能
+**バッファ: 4.0+人月** → Phase 3の4ヶ月前倒しにより大幅拡大。Phase 4 LLMリスクに十分な余裕
 
 ---
 
@@ -443,5 +483,16 @@ Phase5-4: 受入テスト
 
 ---
 
-*最終更新: 2026-02-10*
+### 改善提案（2026-02-10 レビュー結果）
+
+| 優先度 | 提案 | 対応時期 |
+|--------|------|---------|
+| ~~HIGH~~ | ~~テストカバレッジ80%達成~~ | **完了**（2月達成） |
+| MEDIUM | Blue-Green デプロイを Phase 5 に移動（Phase 2 は検索+インポートに集中） | Phase 2 計画時 |
+| MEDIUM | ML学習データ量の現実的見積もり（不足時は合成データ計画） | 3月末 |
+| MEDIUM | 受入テスト仕様の早期定義（クライアントと合意） | 4月 |
+| LOW | 共通 useNotification フック作成（Snackbar 重複削減） | Phase 2 UI改善時 |
+| LOW | Tab 2/3 の責務再定義（分析 vs 品質管理） | Phase 3 ダッシュボード時 |
+
+*最終更新: 2026-02-11*
 *作成者: Claude Code + yasu*

@@ -107,10 +107,10 @@ const SubstrateTypeList = ({ onEdit }) => {
                     {type.description || '-'}
                   </TableCell>
                   <TableCell align="center">
-                    <IconButton size="small" onClick={() => onEdit(type)} color="primary">
+                    <IconButton size="small" onClick={() => onEdit(type)} color="primary" aria-label="編集">
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => setDeleteDialog({ open: true, target: type })} color="error">
+                    <IconButton size="small" onClick={() => setDeleteDialog({ open: true, target: type })} color="error" aria-label="削除">
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>

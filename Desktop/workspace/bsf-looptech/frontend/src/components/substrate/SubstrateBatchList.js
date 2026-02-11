@@ -130,13 +130,13 @@ const SubstrateBatchList = ({ onEdit }) => {
                       <Chip label={statusCfg.label} size="small" color={statusCfg.color} variant="outlined" />
                     </TableCell>
                     <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
-                      <IconButton size="small" onClick={() => setDetailDialog({ open: true, record })} color="info">
+                      <IconButton size="small" onClick={() => setDetailDialog({ open: true, record })} color="info" aria-label="詳細表示">
                         <ViewIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => onEdit(record)} color="primary">
+                      <IconButton size="small" onClick={() => onEdit(record)} color="primary" aria-label="編集">
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => setDeleteDialog({ open: true, target: record })} color="error">
+                      <IconButton size="small" onClick={() => setDeleteDialog({ open: true, target: record })} color="error" aria-label="削除">
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </TableCell>

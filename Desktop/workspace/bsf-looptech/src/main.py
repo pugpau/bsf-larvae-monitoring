@@ -11,6 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from src.api.routes import auth, waste
+from src.api.routes.materials import router as materials_router
+from src.api.routes.ml import router as ml_router
+from src.api.routes.optimization import router as optimization_router
 from src.auth.middleware import AuthenticationMiddleware, RateLimitMiddleware
 from src.config import settings
 from src.utils.logging import setup_logging, get_logger
@@ -41,6 +44,13 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down BSF-LoopTech API")
+    try:
+        from src.database.postgresql import close_database
+
+        await close_database()
+        logger.info("Database connections closed")
+    except Exception as e:
+        logger.error(f"Shutdown error: {e}")
 
 
 app = FastAPI(
@@ -67,14 +77,20 @@ app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
 app.add_middleware(
     AuthenticationMiddleware,
     exempt_paths=[
-        "/docs", "/redoc", "/openapi.json", "/health", "/", "/favicon.ico",
+        "/docs", "/redoc", "/openapi.json", "/health", "/ready", "/", "/favicon.ico",
         "/auth/login", "/auth/refresh", "/auth/health",
+        "/api/v1/suppliers", "/api/v1/solidification-materials",
+        "/api/v1/leaching-suppressants", "/api/v1/recipes",
+        "/api/v1/predict", "/api/v1/ml", "/api/v1/optimize",
     ],
 )
 
 # Routers
 app.include_router(auth.router)
 app.include_router(waste.router)
+app.include_router(materials_router)
+app.include_router(ml_router)
+app.include_router(optimization_router)
 
 
 @app.get("/")
@@ -106,6 +122,26 @@ async def health_check():
         },
         "details": {} if pg_ok else {"postgresql": pg_detail or "Connection failed"},
     }
+
+
+@app.get("/ready")
+async def readiness_check():
+    """Readiness probe — returns 503 when DB is unavailable (deploy script uses this)."""
+    from fastapi.responses import JSONResponse
+    from src.database.postgresql import check_database_health
+
+    try:
+        db_ok = await check_database_health()
+    except Exception:
+        db_ok = False
+
+    if not db_ok:
+        return JSONResponse(
+            status_code=503,
+            content={"ready": False, "reason": "database unavailable"},
+        )
+
+    return {"ready": True}
 
 
 if __name__ == "__main__":

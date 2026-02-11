@@ -310,7 +310,7 @@ class SecurityStatusResponse(BaseModel):
     locked_accounts: int
     api_keys_active: int
     security_events_today: int
-    last_password_policy_update: Optional[datetime]
+    last_password_policy_update: Optional[datetime] = None
     system_health: str
 
 

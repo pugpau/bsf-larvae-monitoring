@@ -17,13 +17,16 @@ import theme from './theme/materialTheme';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginForm from './components/auth/LoginForm';
 import PrivateRoute from './components/auth/PrivateRoute';
-import SubstrateTypeForm from './components/substrate/SubstrateTypeForm.js';
 import SubstrateBatchForm from './components/substrate/SubstrateBatchForm.js';
-import SubstrateTypeList from './components/substrate/SubstrateTypeList.js';
 import SubstrateBatchList from './components/substrate/SubstrateBatchList.js';
 import AnalyticsDashboard from './components/analytics/AnalyticsDashboard.js';
 import CorrelationAnalysis from './components/analytics/CorrelationAnalysis.js';
-import BatchComparison from './components/batch/BatchComparison.js';
+import MasterManagement from './components/master/MasterManagement.tsx';
+import RecipeList from './components/recipe/RecipeList.tsx';
+import MLPredictionPanel from './components/analytics/MLPredictionPanel.tsx';
+import OptimizationPanel from './components/analytics/OptimizationPanel.tsx';
+import TrendAnalysis from './components/analytics/TrendAnalysis.tsx';
+import PredictionAccuracy from './components/analytics/PredictionAccuracy.tsx';
 import { initializeFromApi } from './utils/storage';
 
 
@@ -34,7 +37,6 @@ const Dashboard = () => {
   useEffect(() => {
     initializeFromApi();
   }, []);
-  const [editingSubstrateType, setEditingSubstrateType] = useState(null);
   const [editingSubstrateBatch, setEditingSubstrateBatch] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
 
@@ -42,13 +44,7 @@ const Dashboard = () => {
 
   const handleTabChange = (_, newValue) => {
     setSelectedTab(newValue);
-    setEditingSubstrateType(null);
     setEditingSubstrateBatch(null);
-  };
-
-  const handleEditSubstrateType = (substrateType) => {
-    setEditingSubstrateType(substrateType);
-    setSelectedTab(4);
   };
 
   const handleEditSubstrateBatch = (substrateBatch) => {
@@ -142,17 +138,21 @@ const Dashboard = () => {
         </Box>
       )}
 
-      {/* Tab 1: 配合管理 — 固化剤・溶出抑制材の配合レシピ、AI推奨 */}
+      {/* Tab 1: 配合管理 — 配合レシピCRUD、ML予測、コスト最適化 */}
       {selectedTab === 1 && (
-        <Box>
-          <BatchComparison />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <RecipeList />
+          <MLPredictionPanel />
+          <OptimizationPanel />
         </Box>
       )}
 
-      {/* Tab 2: 分析ダッシュボード — 相関グラフ、統計、トレンド */}
+      {/* Tab 2: 分析ダッシュボード — 相関グラフ、統計、トレンド、精度 */}
       {selectedTab === 2 && (
-        <Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <CorrelationAnalysis />
+          <TrendAnalysis />
+          <PredictionAccuracy />
         </Box>
       )}
 
@@ -163,17 +163,10 @@ const Dashboard = () => {
         </Box>
       )}
 
-      {/* Tab 4: マスタ管理 — 材料マスタ、基準値設定 */}
+      {/* Tab 4: マスタ管理 — 搬入先、固化材、溶出抑制剤マスタ */}
       {selectedTab === 4 && (
         <Box>
-          {editingSubstrateType ? (
-            <SubstrateTypeForm
-              initialData={editingSubstrateType}
-              onSubmitSuccess={() => setEditingSubstrateType(null)}
-            />
-          ) : (
-            <SubstrateTypeList onEdit={handleEditSubstrateType} />
-          )}
+          <MasterManagement />
         </Box>
       )}
     </Container>

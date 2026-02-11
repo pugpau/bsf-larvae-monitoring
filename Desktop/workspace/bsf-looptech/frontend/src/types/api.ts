@@ -10,6 +10,30 @@ export interface ApiResponse<T> {
   };
 }
 
+/** Paginated response from backend */
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** List query parameters */
+export interface ListParams {
+  q?: string;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+/** CSV import result */
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
 /** Supplier (搬入先マスタ) */
 export interface Supplier {
   id: string;

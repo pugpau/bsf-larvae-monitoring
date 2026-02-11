@@ -21,12 +21,18 @@ logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    pool_recycle=300,
-)
+_engine_kwargs: dict = {
+    "echo": False,
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+}
+# pool_size / max_overflow only apply to QueuePool (PostgreSQL).
+# SQLite uses StaticPool and rejects these kwargs.
+if "sqlite" not in settings.DATABASE_URL:
+    _engine_kwargs["pool_size"] = 5
+    _engine_kwargs["max_overflow"] = 10
+
+engine = create_async_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -200,6 +206,56 @@ class RecipeDetail(Base):
     )
 
 
+# ── ML Pipeline Tables (Phase 3) ──
+
+
+class MLModel(Base):
+    """Trained ML model metadata — versioning, metrics, activation status."""
+    __tablename__ = "ml_models"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, index=True)
+    model_type = Column(String(30), nullable=False)  # classifier, regressor
+    version = Column(Integer, nullable=False, default=1)
+    file_path = Column(String(500), nullable=False)
+
+    training_records = Column(Integer, nullable=False)
+    feature_columns = Column(JSON, nullable=True)
+    target_columns = Column(JSON, nullable=True)
+    metrics = Column(JSON, nullable=False)
+
+    is_active = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_ml_models_type_active", "model_type", "is_active"),
+    )
+
+
+class MLPrediction(Base):
+    """Prediction audit log — tracks each prediction for feedback and accuracy."""
+    __tablename__ = "ml_predictions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    waste_record_id = Column(UUID(as_uuid=True), ForeignKey("waste_records.id"), nullable=True)
+    model_id = Column(UUID(as_uuid=True), ForeignKey("ml_models.id"), nullable=True)
+
+    input_features = Column(JSON, nullable=False)
+    prediction = Column(JSON, nullable=False)
+    method = Column(String(20), nullable=False)  # ml, similarity, rule
+    confidence = Column(Float, nullable=True)
+
+    actual_formulation = Column(JSON, nullable=True)
+    actual_passed = Column(Boolean, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_ml_predictions_waste_record", "waste_record_id"),
+        Index("ix_ml_predictions_created", "created_at"),
+    )
+
+
 # ── Database utilities ──
 
 
@@ -220,8 +276,9 @@ async def init_database():
     """Create all tables if they don't exist."""
     try:
         from src.auth.models import User, UserSession, LoginAttempt, APIKey
-        # Ensure all Phase 1 models are registered with Base.metadata
-        _ = (Supplier, SolidificationMaterial, LeachingSuppressant, Recipe, RecipeDetail)
+        # Ensure all models are registered with Base.metadata
+        _ = (Supplier, SolidificationMaterial, LeachingSuppressant, Recipe, RecipeDetail,
+             MLModel, MLPrediction)
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
