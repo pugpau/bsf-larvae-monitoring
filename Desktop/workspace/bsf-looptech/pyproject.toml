@@ -16,7 +16,7 @@ dependencies = [
     "asyncpg",
     "alembic",
     "psycopg2-binary",
-    "python-jose[cryptography]",
+    "PyJWT>=2.8.0",
     "passlib[bcrypt]",
     "pydantic[email]",
 ]

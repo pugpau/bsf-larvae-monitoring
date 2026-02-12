@@ -20,6 +20,8 @@ os.environ.update({
     "LOG_LEVEL": "DEBUG",
     "CORS_ORIGINS": "http://localhost:3000",
     "SKIP_AUTH": "true",
+    "RATE_LIMIT_PER_MINUTE": "999999",
+    "BATCH_ENABLED": "false",
 })
 
 # ---------------------------------------------------------------------------

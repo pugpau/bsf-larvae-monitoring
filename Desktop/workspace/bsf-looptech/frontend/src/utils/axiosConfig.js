@@ -7,54 +7,85 @@ import axios from 'axios';
 // Set base URL
 axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-// Request interceptor to add auth token
-axios.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// Send cookies (httpOnly refresh token) with every request
+axios.defaults.withCredentials = true;
 
-// Response interceptor to handle token refresh
-axios.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (refreshToken) {
-          const response = await axios.post('/auth/refresh', {
-            refresh_token: refreshToken
-          });
-          
-          const { access_token } = response.data;
-          localStorage.setItem('accessToken', access_token);
-          
-          // Retry original request with new token
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return axios(originalRequest);
-        }
-      } catch (refreshError) {
-        // Refresh failed, redirect to login
+// ── Shared token refresh mutex ──
+// Serializes concurrent refresh requests so only one fires at a time.
+let refreshPromise = null;
+
+const refreshAccessToken = async () => {
+  if (!refreshPromise) {
+    refreshPromise = axios.post('/auth/refresh')
+      .then((res) => {
+        const { access_token } = res.data;
+        localStorage.setItem('accessToken', access_token);
+        refreshPromise = null;
+        return access_token;
+      })
+      .catch((err) => {
+        refreshPromise = null;
         localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
         window.location.href = '/login';
-        return Promise.reject(refreshError);
-      }
-    }
-    
-    return Promise.reject(error);
+        throw err;
+      });
   }
-);
+  return refreshPromise;
+};
+
+/**
+ * Attach auth + refresh interceptors to an axios instance.
+ */
+const attachInterceptors = (instance) => {
+  instance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
+  instance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const originalRequest = error.config;
+      if (error.response?.status === 401 && !originalRequest._retry) {
+        originalRequest._retry = true;
+        try {
+          const newToken = await refreshAccessToken();
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return instance(originalRequest);
+        } catch (refreshError) {
+          return Promise.reject(refreshError);
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
+};
+
+// Apply interceptors to the global axios instance
+attachInterceptors(axios);
+
+/**
+ * Factory: create an axios instance with auth + refresh interceptors.
+ * Use this instead of bare axios.create() to get consistent auth behavior.
+ * All instances share the same refresh mutex to prevent concurrent refresh requests.
+ */
+export const createAuthenticatedClient = (baseURL, timeout = 10000) => {
+  const instance = axios.create({
+    baseURL,
+    timeout,
+    headers: { 'Content-Type': 'application/json' },
+    withCredentials: true,
+  });
+
+  attachInterceptors(instance);
+
+  return instance;
+};
 
 export default axios;

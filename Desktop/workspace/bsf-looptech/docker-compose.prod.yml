@@ -36,8 +36,11 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SKIP_AUTH: ${SKIP_AUTH:-false}
-      LLM_BASE_URL: http://host.docker.internal:1234/v1
-      LLM_MODEL: openai/gpt-oss-20b
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-20b}
+      BATCH_ENABLED: ${BATCH_ENABLED:-true}
+      BATCH_TIMEZONE: ${BATCH_TIMEZONE:-Asia/Tokyo}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
     volumes:
       - ./logs:/app/logs
       - model_registry:/app/model_registry
@@ -65,8 +68,11 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SKIP_AUTH: ${SKIP_AUTH:-false}
-      LLM_BASE_URL: http://host.docker.internal:1234/v1
-      LLM_MODEL: openai/gpt-oss-20b
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-20b}
+      BATCH_ENABLED: ${BATCH_ENABLED:-true}
+      BATCH_TIMEZONE: ${BATCH_TIMEZONE:-Asia/Tokyo}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
     volumes:
       - ./logs:/app/logs
       - model_registry:/app/model_registry
@@ -102,8 +108,10 @@ services:
     volumes:
       - ./config/nginx-router.conf:/etc/nginx/conf.d/default.conf:ro
       - frontend_build:/usr/share/nginx/html:ro
+      - ./config/ssl:/etc/nginx/ssl:ro
     ports:
       - "3000:80"
+      - "443:443"
     networks:
       - bsf-network
     restart: unless-stopped

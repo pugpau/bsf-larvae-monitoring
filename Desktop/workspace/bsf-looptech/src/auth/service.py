@@ -103,9 +103,10 @@ class AuthenticationService:
             # Create tokens
             access_token_expires = timedelta(minutes=SecurityConfig.ACCESS_TOKEN_EXPIRE_MINUTES)
             refresh_token_expires = timedelta(days=SecurityConfig.REFRESH_TOKEN_EXPIRE_DAYS)
-            
+
             if login_request.remember_me:
-                access_token_expires = timedelta(days=1)  # Longer expiry for "remember me"
+                # Extend refresh token (not access token) for "remember me"
+                refresh_token_expires = timedelta(days=30)
             
             token_data = {
                 "sub": str(authenticated_user.id),

@@ -256,6 +256,80 @@ class MLPrediction(Base):
     )
 
 
+# ── RAG / Chat Tables (Phase 4) ──
+
+
+class SubstrateKnowledge(Base):
+    """Knowledge base for RAG — chunked text with vector embeddings."""
+    __tablename__ = "substrate_knowledge"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(200), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    source_type = Column(String(50), nullable=False, default="manual")  # manual, csv_import, web
+    metadata_json = Column(JSON, nullable=True)
+    embedding = Column(Text, nullable=True)  # pgvector Vector(768) handled at migration level
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChatSession(Base):
+    """Chat session — groups related chat messages."""
+    __tablename__ = "chat_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=True)  # nullable for SKIP_AUTH
+    title = Column(String(200), nullable=False, default="New Chat")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan",
+                            order_by="ChatMessage.created_at")
+
+
+class ChatMessage(Base):
+    """Individual chat message within a session."""
+    __tablename__ = "chat_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(20), nullable=False)  # user, assistant, system
+    content = Column(Text, nullable=False)
+    context_chunks = Column(JSON, nullable=True)  # referenced knowledge IDs + scores
+    token_count = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("ChatSession", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_chat_messages_session_id", "session_id"),
+        Index("ix_chat_messages_created", "created_at"),
+    )
+
+
+# ── Batch Processing Tables (Phase 5) ──
+
+
+class BatchJobRun(Base):
+    """Batch job execution record — tracks scheduled and manual job runs."""
+    __tablename__ = "batch_job_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_name = Column(String(100), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="running")  # running, success, failed
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    result_summary = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_batch_job_runs_name_started", "job_name", "started_at"),
+    )
+
+
 # ── Database utilities ──
 
 
@@ -278,7 +352,8 @@ async def init_database():
         from src.auth.models import User, UserSession, LoginAttempt, APIKey
         # Ensure all models are registered with Base.metadata
         _ = (Supplier, SolidificationMaterial, LeachingSuppressant, Recipe, RecipeDetail,
-             MLModel, MLPrediction)
+             MLModel, MLPrediction, SubstrateKnowledge, ChatSession, ChatMessage,
+             BatchJobRun)
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

@@ -1,5 +1,374 @@
 # BSF-LoopTech プロジェクト会話履歴
 
+## 2026-02-13 - 搬入管理モダナイゼーション完了（localStorage脱却 + TSX化）
+
+### 実施内容
+
+**Step 1: Dead code削除**
+- `SubstrateTypeList.js`, `SubstrateTypeForm.js` 削除（MasterManagement.tsxで置き換え済み）
+- `BatchComparison.js` 削除（App.jsから未参照の完全dead code）
+
+**Step 2: Waste API拡張（バックエンド）**
+- `src/waste/repository.py`: `search_records()` PaginatedResponse + ILIKE検索 + ソート + フィルタ
+- `src/api/routes/waste.py`: 検索パラメータ追加 + CSV export/import エンドポイント
+- `src/waste/models.py`: PaginatedResponse対応スキーマ
+
+**Step 3: TypeScript API層**
+- `frontend/src/api/wasteApi.ts` 新規作成（createAuthenticatedClient使用）
+- `frontend/src/types/api.ts`: WasteRecord型追加
+- `frontend/src/constants/waste.ts`: ELUTION_THRESHOLDS追加
+
+**Step 4: SubstrateBatchList.tsx TSX化**
+- localStorage → wasteApi.ts直接API接続
+- useNotification + ConfirmDeleteDialog共通コンポーネント使用
+- MUI TablePagination追加（25/50/100件）
+
+**Step 5: SubstrateBatchForm.tsx TSX化**
+- storage.js関数 → createWasteRecord/updateWasteRecord
+- WASTE_TYPES定数（getSubstrateTypes不使用）
+- TypeScript型: FormState, AnalysisState, SubstrateBatchFormProps
+
+**Step 6: App.js + 分析コンポーネント移行**
+- App.js: initializeFromApi() 削除 + TSXインポートに切替
+- AnalyticsDashboard.js: getSubstrateBatches() → fetchWasteRecords() async化
+- CorrelationAnalysis.js: 同上パターン
+
+**Step 7: storage.js完全削除**
+- 684行のハイブリッドデータ層を完全削除
+- localStorage依存ゼロ達成
+
+**Step 8: テスト追加**
+- Unit: +10テスト（search/pagination/sort/export）
+- Integration: +7テスト（search/CSV export/import）
+- 全583テスト（457 unit + 126 integration）
+
+### 決定事項・結果
+- **localStorage完全脱却**: マルチユーザー/ブラウザ間データ不整合リスク解消
+- **TypeScript化率向上**: Tab 0（搬入管理）もTSX化完了
+- **storage.js削除**: -684行、フロントエンドバンドル -1.44kB
+- **共通パターン確立**: wasteApi.ts = materialsApi.tsと同じパターン
+- **ビルド成功**: フロントエンドビルド正常完了
+
+### 今後のアクション
+- 全フェーズ完了、納品期限（9/30）まで7ヶ月のバッファ
+- 残タスク: ML学習データ量見積もり（3月末）、受入テスト仕様定義（4月）
+
+---
+
+## 2026-02-12 - Phase 2-6: pgvector + LLM 本番統合 完了
+
+### 実施内容
+
+**Step 1: HNSW ベクトルインデックス**
+- `alembic/versions/a6_phase26_vector_index.py` 作成
+- substrate_knowledge.embedding に HNSW インデックス (vector_cosine_ops)
+- 全件走査 → 近似最近傍探索でO(log n)性能向上
+
+**Step 2: /health LLM チェック**
+- `src/main.py` health_check() に LM Studio `/v1/models` 疎通チェック追加
+- `services.llm: "ok" | "unavailable"` フィールド追加
+- LLM down でも status は degraded にしない (テキスト検索 fallback あり)
+
+**Step 3: .env.example 全変数追加**
+- LLM_BASE_URL, LLM_MODEL, RATE_LIMIT_PER_MINUTE, BATCH_ENABLED, BATCH_TIMEZONE
+
+**Step 4: ナレッジ CSV インポート API**
+- `POST /api/v1/knowledge/import-csv` エンドポイント追加
+- BOM付きUTF-8 CSV (title,content,source_type) → embedding自動生成+INSERT
+- 既存 materials CSV パターン踏襲
+
+**Step 5: get_embeddings_batch 並行化**
+- 逐次処理 → asyncio.gather + Semaphore(5) に改善
+- LM Studio への同時リクエスト制限付き (約3-5x高速化)
+
+**Step 6: テスト追加 (15テスト)**
+- test_embedding_batch.py: 6テスト (並行, Semaphore制限, mixed success/failure)
+- test_health_llm.py: 4テスト (LLM up/down, response structure)
+- test_knowledge_csv_import.py: 5テスト (正常, BOM, 空行, デフォルト, 空ファイル)
+
+### 結果
+- **595テスト全パス** (456 unit + 119 integration + 20 performance)
+- フロントエンドビルド成功
+- 新規4ファイル + 編集6ファイル
+
+---
+
+## 2026-02-12 - Phase 5-4: 受入テスト 完了
+
+### 実施内容
+
+**Step 1: Playwright E2E テスト基盤**
+- `@playwright/test` インストール (--legacy-peer-deps for TS5 compatibility)
+- `frontend/playwright.config.ts` 作成 (chromium, baseURL localhost:3000)
+- 5 E2E テストファイル作成:
+  1. `e2e/auth-navigation.spec.ts` — ログイン→5タブ遷移→ログアウト
+  2. `e2e/waste-prediction.spec.ts` — 搬入管理→配合予測パネル
+  3. `e2e/recipe-management.spec.ts` — 配合管理→マスタ管理
+  4. `e2e/chat-rag.spec.ts` — ChatFAB→Drawer表示
+  5. `e2e/ml-retrain.spec.ts` — 分析ダッシュボード→品質管理
+- `package.json` に `e2e` / `e2e:headed` script追加
+- `.gitignore` にPlaywright artifacts追加
+
+**Step 2: パフォーマンステスト**
+- `tests/performance/test_api_response_time.py` — 20テスト全パス
+- 対象: health/ready, waste, materials, ML, optimization, batch, KPI, chat
+- 全API <500ms (最大30ms) — SQLite in-memory環境
+- `pytest.ini` に `performance` マーカー追加
+
+**Step 3: セキュリティ監査**
+- bandit結果: HIGH/CRITICAL 0件, MEDIUM 1件(0.0.0.0バインド=Docker正常)
+- pip-audit結果: 1件(ecdsa CVE-2024-23342, 修正版なし, サイドチャネル=影響なし)
+- `src/config.py` SECRET_KEY デフォルト値使用時の警告ログ追加
+- OWASP Top 10 チェック: A01-A10 全項目確認済み
+
+### 決定事項・結果
+- 580テスト全パス (446 unit + 114 integration + 20 performance)
+- フロントエンドビルド成功
+- Phase 5 全サブフェーズ(5-1〜5-4)完了
+
+### 今後のアクション
+- Phase 5 完了 → 全フェーズ(1〜5)完了
+- Phase 2-6 (pgvector + LLM本番統合) は5月末に実施予定
+
+---
+
+## 2026-02-12 - Phase 5-3: 本番デプロイ準備 完了
+
+### 実施内容
+
+#### SSL自己署名証明書 + HTTPS
+- `scripts/generate_ssl_cert.sh` — RSA 2048bit, 10年有効, SAN対応 (localhost + カスタムホスト名)
+- `config/ssl/.gitkeep` — SSL証明書ディレクトリ (実ファイルは.gitignore)
+- `config/nginx-router.conf.template` — HTTPS server block追加 (TLSv1.2/1.3, HSTS)
+- `docker-compose.prod.yml` — router に 443:443 + ssl volume追加
+
+#### .env.production Docker対応
+- POSTGRES_HOST=postgres (Docker内ホスト名)
+- LLM_BASE_URL=http://host.docker.internal:1234/v1
+- BATCH_ENABLED=true, BATCH_TIMEZONE=Asia/Tokyo
+- SECRET_KEY/POSTGRES_PASSWORD → CHANGE_ME プレースホルダー
+
+#### バックアップ/監視 launchd化
+- `scripts/backup_databases.sh` — Docker pg_dump | gzip, 30日保持
+- `config/com.bsf-looptech.backup.plist` — 毎日 3:00 AM
+- `scripts/system_monitor.sh` — Docker コンテナ/PostgreSQL/ヘルスチェック監視
+- `config/com.bsf-looptech.monitor.plist` — 30分ごと
+- `config/com.bsf-looptech.production.plist` — Docker Compose起動に更新
+
+#### Dead code/docs 削除
+- 削除: start/stop/restart/status_production.sh (4 scripts, ~940行)
+- 削除: PRODUCTION_SETUP/DEPLOYMENT_GUIDE/PRODUCTION_CHECKLIST/OPERATION_GUIDE.md (4 docs)
+- `OPERATIONS_MANUAL.md` — 10セクション統合リライト (Docker/Blue-Green/SSL/launchd完全対応)
+
+### 決定事項・結果
+- テスト: **560テスト全パス** (446 unit + 114 integration) — バックエンド変更なし
+- フロントエンドビルド成功
+- plutil -lint: 3 plist 全OK
+- SSL: 閉域ネットワーク用自己署名 (CA不要)
+- cron vs launchd: macOS標準のlaunchd採用
+
+### 今後のアクション
+- Phase 5-4: 受入テスト
+
+---
+
+## 2026-02-12 - Phase 5-2: KPIダッシュボード 実装完了
+
+### 実施内容
+
+#### バックエンド (4ファイル新規 + 1ファイル編集)
+- `src/kpi/__init__.py` — モジュール初期化
+- `src/kpi/schemas.py` — Pydantic スキーマ (KPIMetric, KPIRealtimeResponse, KPITrendsResponse, KPIAlertsResponse)
+- `src/kpi/service.py` — KPIService: 6指標計算 + トレンド + アラート
+- `src/api/routes/kpi.py` — 3 API (GET /kpi/realtime, /kpi/trends, /kpi/alerts)
+- `src/main.py` — kpi_router 登録 + exempt_paths 追加
+
+#### 6 KPI指標
+1. 処理量 (waste_records COUNT)
+2. 配合成功率 (formulated/tested/passed / total * 100)
+3. 材料コスト (formulation JSON → material master unit_cost)
+4. ML予測利用率 (ml_predictions / waste_records * 100)
+5. 平均処理時間 (delivery_date → updated_at, hours)
+6. 基準値逸脱率 (elution_result vs ELUTION_THRESHOLDS)
+
+#### フロントエンド (1ファイル新規 + 2ファイル編集)
+- `frontend/src/components/analytics/KPIDashboard.tsx` — 6 KPIカード + アラート + ミニトレンドチャート
+- `frontend/src/utils/apiClient.js` — +3 KPI API 関数
+- `frontend/src/App.js` — Tab 2 先頭に KPIDashboard 配置
+
+#### テスト (2ファイル新規)
+- `tests/unit/test_kpi_service.py` — 16テスト
+- `tests/integration/test_kpi_api.py` — 9テスト
+
+### 決定事項・結果
+- テスト: 535 → **560テスト全パス** (+25)
+- フロントエンドビルド成功 (+841B)
+- 新テーブル不要 — 既存テーブルから全指標算出
+- ポーリング 30秒間隔 (realtimeのみ)
+- kpi-card CSS 既存を再利用、トレンド方向は指標ごとに反転
+
+### 今後のアクション
+- Phase 5-3: 本番デプロイ (Mac mini Docker)
+- Phase 5-4: 受入テスト
+
+---
+
+## 2026-02-12 - Phase 5-1: APScheduler バッチ処理 実装完了
+
+### 実施内容
+
+#### 新規ファイル (7ファイル)
+- `src/batch/__init__.py` — モジュール初期化
+- `src/batch/schemas.py` — Pydantic スキーマ (BatchJobRunResponse, BatchJobListResponse, BatchTriggerResponse, SchedulerStatusResponse)
+- `src/batch/jobs.py` — 3ジョブ関数 (daily_aggregation, weekly_ml_retrain, monthly_report) + JOB_REGISTRY
+- `src/batch/scheduler.py` — AsyncIOScheduler 初期化 (cron: daily 03:00, weekly Sun 02:00, monthly 1st 04:00)
+- `src/api/routes/batch.py` — 4 API エンドポイント (jobs list/detail, trigger, status)
+- `alembic/versions/a6_phase5_batch_jobs.py` — batch_job_runs テーブル migration
+- テストファイル 3つ (unit: test_batch_jobs.py, test_batch_scheduler.py / integration: test_batch_api.py)
+
+#### 編集ファイル (5ファイル)
+- `requirements.txt` — `apscheduler>=3.10.0` 追加
+- `src/config.py` — BATCH_ENABLED, BATCH_TIMEZONE 設定追加
+- `src/database/postgresql.py` — BatchJobRun モデル追加
+- `src/main.py` — lifespan にスケジューラ startup/shutdown + batch_router 登録
+- `tests/conftest.py` — BATCH_ENABLED=false 追加
+
+### 決定事項・結果
+- テスト: 509 → **535テスト全パス** (+26: 15 unit + 11 integration)
+- フロントエンドビルド成功（影響なし）
+- バッチジョブは既存ML/waste内部ロジックを直接呼び出し（HTTP API経由ではない）
+- BATCH_ENABLED=false でテスト時スケジューラ無効化
+
+### 技術メモ
+- Integration test で seed_job_runs fixture が累積 → `>= 3` アサーションで対応
+- trigger endpoint: `Depends(get_async_session)` + DB最新レコード取得パターン
+
+### 今後のアクション
+- Phase 5-2: KPI ダッシュボード (src/kpi/ + KPIDashboard.tsx)
+
+---
+
+## 2026-02-12 - Phase 5 着手: keikaku.md 更新 + 計画策定
+
+### 実施内容
+
+#### keikaku.md 更新
+- Phase 4 タスクリスト: 全タスクを ✅ 完了に更新（詳細実績記載）
+- Phase 5 タスクリスト: 具体的な実装内容に更新
+  - Phase 5-1: APScheduler バッチ処理（日次/週次/月次ジョブ詳細化）
+  - Phase 5-2: KPI ダッシュボード（6指標定義、ポーリング更新）
+  - Phase 5-3: 本番デプロイ（Mac mini 固有設定、SSL、cron）
+  - Phase 5-4: 受入テスト（Playwright E2E 5シナリオ、OWASP）
+- 最終更新日: 2026-02-12
+
+#### 現状分析
+- APScheduler: requirements.txt に未追加
+- 既存 KPI: TrendAnalysis.tsx + PredictionAccuracy.tsx（ML系のみ）
+- Substrate コンポーネント: localStorage のみ（バックエンド API 未接続）
+- デプロイスクリプト: 一式あり（deploy-blue-green.sh 等）
+
+### 決定事項・結果
+- Phase 5-1（バッチ処理）から着手
+- KPI はポーリング更新（30秒間隔、WebSocket不要）
+
+### 今後のアクション
+- Phase 5-1: APScheduler + バッチジョブ実装
+- Phase 5-2: KPI API + ダッシュボード TSX
+
+---
+
+## 2026-02-12 - Phase 4-2: チャットUIコンポーネント
+
+### 実施内容
+
+#### チャットUI (FAB + Drawer パターン)
+- `ChatFab.tsx` — 右下固定の Floating Action Button (SmartToyアイコン)
+- `ChatDrawer.tsx` — 右側 Drawer (セッション一覧 + チャット画面)
+- `ChatMessageList.tsx` — メッセージ表示 (左右配置、コンテキスト参照Accordion、タイピングインジケーター)
+- `ChatInput.tsx` — 入力欄 (multiline TextField、Enter送信、送信中disabled)
+- `types/api.ts` — ChatSession, ChatMessage, ChatResponse等の型定義追加
+- `App.js` — ChatFab を Dashboard 内に配置
+
+#### UI仕様
+- Drawer幅: 420px (デスクトップ) / 100vw (モバイル)
+- ユーザーメッセージ: 右寄せ、primary背景
+- AI回答: 左寄せ、grey.100背景、参照情報は折りたたみ表示
+- セッション管理: 作成、一覧、削除
+- LLM接続エラー時: エラーメッセージ表示
+
+### 決定事項・結果
+- フロントエンドビルド成功 (Chat関連警告ゼロ)
+- バックエンドテスト: 509テスト全パス (リグレッションなし)
+- 5タブ構造を温存し、FAB+Drawerで全タブからチャットアクセス可能
+
+### 今後のアクション
+- Docker + LM Studio での実環境テスト
+- ストリーミング応答の統合 (askChatStream)
+- 知識ベース管理UIの追加
+
+---
+
+## 2026-02-12 - Phase 4: RAG/LLMチャット + 品質修正
+
+### 実施内容
+
+#### B-1: Integration テスト Rate Limiter 修正
+- `src/config.py` に `RATE_LIMIT_PER_MINUTE` 設定追加 (default=60)
+- `src/main.py` でハードコード60→設定値に変更
+- `tests/conftest.py` に `RATE_LIMIT_PER_MINUTE=999999` 追加
+- **結果**: unit+integration 全448テスト一括パス (429エラー解消)
+
+#### B-2: フロントエンドビルド確認
+- `npm run build` 成功 (eslint warning のみ)
+
+#### A-1: DB スキーマ拡張 (3テーブル)
+- `SubstrateKnowledge` — 知識ベース (title, content, embedding Vector(768), metadata_json)
+- `ChatSession` — チャットセッション管理
+- `ChatMessage` — メッセージ履歴 (role, content, context_chunks, token_count)
+- Alembic migration `a5_phase4_rag_tables.py` 作成
+
+#### A-2: RAG モジュール (src/rag/ — 8ファイル新規)
+- `schemas.py` — Pydantic: KnowledgeCreate, ChatRequest, ChatResponse 等
+- `embedding.py` — LM Studio `/v1/embeddings` ラッパー (nomic-embed, dim=768)
+- `text_splitter.py` — チャンク分割 (512文字, overlap 50, 文境界検出)
+- `knowledge_repo.py` — CRUD + pgvector cosine検索 + LOWER(LIKE)テキスト検索
+- `knowledge_seeder.py` — BSF飼育知識シードデータ (5件)
+- `chain.py` — RAG chain (retrieve→prompt→LLM) + SSE streaming
+- `chat_repo.py` — セッション/メッセージ CRUD
+
+#### A-3: Chat API (src/api/routes/chat.py — 9エンドポイント)
+- POST/GET/GET/{id}/DELETE `/chat/sessions`
+- POST `/chat/ask` — 非ストリーミングRAG
+- POST `/chat/ask/stream` — SSEストリーミングRAG
+- POST/GET `/knowledge` — 知識ベースCRUD
+- POST `/knowledge/seed` — 初期データ投入
+
+#### A-4: テスト (+61件)
+- `test_rag_text_splitter.py` — 9テスト (チャンク分割)
+- `test_rag_embedding.py` — 6テスト (embedding API mock)
+- `test_rag_chain.py` — 7テスト (RAG chain mock)
+- `test_rag_chat_repo.py` — 11テスト (セッション/メッセージDB)
+- `test_rag_knowledge_repo.py` — 12テスト (知識ベースDB+検索)
+- `test_chat_api.py` — 13テスト (統合: API全エンドポイント)
+- 修正: ILIKE→LOWER(LIKE)でSQLite互換, AsyncMock→MagicMock, text_splitter無限ループ
+
+#### A-5: apiClient.js 更新
+- Chat API関数追加: createChatSession, fetchChatSessions, fetchChatSession, deleteChatSession, askChat, askChatStream
+- Knowledge API関数追加: createKnowledge, fetchKnowledge, seedKnowledge
+
+### 決定事項・結果
+- テスト: **448→509テスト** (415 unit + 94 integration) 全パス
+- フロントエンドビルド成功
+- RAG フォールバック: LM Studio未起動→503 / Embedding失敗→LIKE検索
+- SSE streaming対応 (text/event-stream)
+
+### 今後のアクション
+- Phase 4-2: チャットUIコンポーネント (React + MUI)
+- Docker PostgreSQL環境でのpgvector統合テスト
+- 本番環境LM Studioとの接続テスト
+
+---
+
 ## 2026-02-11 - Phase 2-6: pgvector検証 + LLMベンチマーク
 
 ### 実施内容
@@ -2509,4 +2878,42 @@ Phase 1〜3で作成した全フロントエンドコンポーネントをMASTER
 
 ### 今後のアクション
 - pgvector + LLMベンチマーク（5月末予定）
+
+## 2026-02-12 - セキュリティ監査 Phase C+D 完了
+
+### Phase C (MEDIUM — 計画的改善 15件)
+- C2: JWT トークンブラックリスト (JTI) — ログアウト時のトークン無効化
+- C3: remember_me 修正 — refresh token 延長 (access token ではなく)
+- C4: CORS 厳格化 — `allow_methods/headers` をワイルドカードから明示リストに
+- C5: ChatRequest.question に max_length=2000
+- C6: sort_by カラムのホワイトリスト — 4リポジトリに `_sortable_columns` 追加
+- C7: Materials CSV アップロード 10MB制限 — 3エンドポイント
+- C8: DB パスワード本番ガード — デフォルトパスワード拒否
+- C9: PasswordChange/PasswordResetConfirm にパスワード強度バリデーション追加
+- C10: WasteRecord 文字列フィールドに max_length 追加
+- C11: batch API エラー情報漏洩修正 — ジョブ名一覧とスタックトレース除去
+- C12: Rate limiter メモリ管理 — 100リクエスト毎に陳腐化IPエントリ削除
+- C13: nginx 静的ファイル location でセキュリティヘッダ再宣言
+- C15: SQL パラメータのログ漏洩修正 — `[REDACTED]` に置換
+- C18: API key revoke にオーナーシップ検証 (IDOR修正)
+- C19: KnowledgeCreate.content に max_length=50000
+
+### Phase D (長期的改善 4件)
+- C14: python-jose → PyJWT 依存関係置換 (メンテナンス停止ライブラリの排除)
+- C17: UserResponse スキーマ分割 — UserProfileResponse (一般) + UserResponse (管理者)
+- C1: Git履歴の機密情報対応 — OPERATIONS_MANUAL にローテーション手順追加
+- C16: refresh token を httpOnly cookie に移行 — XSS対策強化
+
+### テスト結果
+- Unit: 447テストパス
+- Integration: 119テストパス
+- 合計: 566テスト全パス
+- フロントエンドビルド成功
+
+### 決定事項・結果
+- セキュリティ監査 Phase A〜D 全完了
+- Phase A (CRITICAL 5件) + Phase B (HIGH 12件) + Phase C (MEDIUM 15件) + Phase D (長期 4件) = 計36件修正
+- 依存関係: python-jose → PyJWT に完全移行
+- 認証トークン: refresh token が httpOnly cookie に移行 (localStorage から)
+- ユーザーレスポンス: 管理者向けフィールド (is_superuser, failed_login_attempts, locked_until) は /me エンドポイントから除外
 

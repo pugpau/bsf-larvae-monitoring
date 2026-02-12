@@ -1,7 +1,10 @@
 #!/bin/bash
 
 # BSF-LoopTech システム監視スクリプト
-# 本番環境用リソース監視とアラート
+# Docker環境用 — コンテナ・リソース監視
+#
+# Usage: ./scripts/system_monitor.sh [--json] [--quiet]
+# launchd: config/com.bsf-looptech.monitor.plist (30分ごと)
 
 set -e
 
@@ -12,8 +15,21 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# オプション解析
+JSON_OUTPUT=false
+QUIET=false
+for arg in "$@"; do
+    case $arg in
+        --json) JSON_OUTPUT=true ;;
+        --quiet) QUIET=true ;;
+    esac
+done
+
+# ログ関数
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
+    if [ "$QUIET" = false ]; then
+        echo -e "${GREEN}[INFO]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
+    fi
 }
 
 log_warn() {
@@ -25,301 +41,206 @@ log_error() {
 }
 
 log_header() {
-    echo -e "${BLUE}================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}================================${NC}"
-}
-
-# プロジェクトディレクトリ
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PROJECT_DIR"
-
-# 監視設定
-CPU_THRESHOLD=80           # CPU使用率アラート閾値（%）
-MEMORY_THRESHOLD=80        # メモリ使用率アラート閾値（%）
-DISK_THRESHOLD=85          # ディスク使用率アラート閾値（%）
-LOG_SIZE_THRESHOLD=100     # ログファイルサイズ閾値（MB）
-
-# アラートファイル
-ALERT_LOG="logs/system_alerts.log"
-MONITOR_LOG="logs/system_monitor.log"
-
-# 現在時刻
-CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-
-# ヘルパー関数
-send_alert() {
-    local level="$1"
-    local message="$2"
-    echo "[$CURRENT_TIME] [$level] $message" >> "$ALERT_LOG"
-    
-    case "$level" in
-        "CRITICAL")
-            log_error "CRITICAL: $message"
-            ;;
-        "WARNING")
-            log_warn "WARNING: $message"
-            ;;
-        "INFO")
-            log_info "INFO: $message"
-            ;;
-    esac
-}
-
-# 1. システムリソース監視
-monitor_system_resources() {
-    log_info "システムリソース監視中..."
-    
-    # CPU使用率
-    cpu_usage=$(top -l 1 -s 0 | grep "CPU usage" | awk '{print $3}' | sed 's/%//')
-    cpu_usage_int=${cpu_usage%.*}  # 小数点以下を削除
-    
-    if [ "$cpu_usage_int" -gt "$CPU_THRESHOLD" ]; then
-        send_alert "WARNING" "High CPU usage detected: ${cpu_usage}%"
+    if [ "$QUIET" = false ]; then
+        echo -e "${BLUE}================================${NC}"
+        echo -e "${BLUE}$1${NC}"
+        echo -e "${BLUE}================================${NC}"
     fi
-    
+}
+
+EXIT_CODE=0
+
+# ─── システムリソース監視 ───
+check_system_resources() {
+    log_header "システムリソース"
+
+    # CPU使用率（macOS）
+    CPU_USAGE=$(top -l 1 | grep "CPU usage" | awk '{print $3}' | tr -d '%')
+    log_info "CPU使用率: ${CPU_USAGE}%"
+    if (( $(echo "$CPU_USAGE > 90" | bc -l) )); then
+        log_warn "CPU使用率が90%を超えています"
+        EXIT_CODE=1
+    fi
+
     # メモリ使用率
-    memory_info=$(vm_stat | grep -E "Pages (free|active|inactive|speculative|wired)")
-    page_size=$(vm_stat | grep "page size" | awk '{print $8}')
-    
-    # メモリ使用率計算（簡易版）
-    total_memory_gb=$(sysctl -n hw.memsize | awk '{print $1/1024/1024/1024}')
-    available_memory_gb=$(echo "$memory_info" | awk -v ps="$page_size" '
-        /Pages free/ {free=$3}
-        /Pages speculative/ {spec=$3}
-        END {print (free+spec)*ps/1024/1024/1024}
-    ')
-    
-    memory_usage=$(echo "$total_memory_gb $available_memory_gb" | awk '{printf "%.0f", (1-$2/$1)*100}')
-    
-    if [ "$memory_usage" -gt "$MEMORY_THRESHOLD" ]; then
-        send_alert "WARNING" "High memory usage detected: ${memory_usage}%"
+    MEM_TOTAL=$(sysctl -n hw.memsize 2>/dev/null)
+    MEM_TOTAL_GB=$(echo "scale=1; $MEM_TOTAL / 1073741824" | bc)
+    # vm_stat で空きページ数を取得
+    FREE_PAGES=$(vm_stat | grep "Pages free" | awk '{print $3}' | tr -d '.')
+    PAGE_SIZE=$(sysctl -n hw.pagesize)
+    MEM_FREE_GB=$(echo "scale=1; $FREE_PAGES * $PAGE_SIZE / 1073741824" | bc)
+    MEM_USED_GB=$(echo "scale=1; $MEM_TOTAL_GB - $MEM_FREE_GB" | bc)
+    MEM_PERCENT=$(echo "scale=0; $MEM_USED_GB * 100 / $MEM_TOTAL_GB" | bc)
+    log_info "メモリ: ${MEM_USED_GB}GB / ${MEM_TOTAL_GB}GB (${MEM_PERCENT}%)"
+    if [ "$MEM_PERCENT" -gt 90 ]; then
+        log_warn "メモリ使用率が90%を超えています"
+        EXIT_CODE=1
     fi
-    
+
     # ディスク使用率
-    disk_usage=$(df -h . | tail -1 | awk '{print $5}' | sed 's/%//')
-    
-    if [ "$disk_usage" -gt "$DISK_THRESHOLD" ]; then
-        send_alert "CRITICAL" "High disk usage detected: ${disk_usage}%"
+    DISK_USAGE=$(df -h / | tail -1 | awk '{print $5}' | tr -d '%')
+    DISK_AVAIL=$(df -h / | tail -1 | awk '{print $4}')
+    log_info "ディスク: ${DISK_USAGE}% 使用中 (空き: ${DISK_AVAIL})"
+    if [ "$DISK_USAGE" -gt 85 ]; then
+        log_warn "ディスク使用率が85%を超えています"
+        EXIT_CODE=1
     fi
-    
-    # 監視ログに記録
-    echo "[$CURRENT_TIME] CPU:${cpu_usage}% MEM:${memory_usage}% DISK:${disk_usage}%" >> "$MONITOR_LOG"
 }
 
-# 2. BSF-LoopTechプロセス監視
-monitor_bsf_processes() {
-    log_info "BSF-LoopTechプロセス監視中..."
-    
-    # 監視対象プロセス
-    PROCESSES=(
-        "uvicorn.*main:app:FastAPIアプリケーション"
-        "python.*ml_pipeline_manager.py:MLパイプラインスケジューラー"
-        "mosquitto.*mosquitto.conf:TLS MQTTブローカー"
-    )
-    
-    for process_info in "${PROCESSES[@]}"; do
-        IFS=':' read -r pattern name <<< "$process_info"
-        
-        if ! pgrep -f "$pattern" > /dev/null 2>&1; then
-            send_alert "CRITICAL" "$name process is not running"
+# ─── Dockerコンテナ監視 ───
+check_docker_containers() {
+    log_header "Dockerコンテナ"
+
+    # Docker の動作確認
+    if ! docker info > /dev/null 2>&1; then
+        log_error "Docker が起動していません"
+        EXIT_CODE=2
+        return
+    fi
+
+    # 期待されるコンテナ一覧
+    EXPECTED_CONTAINERS=("bsf-postgres" "bsf-router")
+
+    for CONTAINER in "${EXPECTED_CONTAINERS[@]}"; do
+        if docker inspect "$CONTAINER" > /dev/null 2>&1; then
+            STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER")
+            HEALTH=$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo "no-healthcheck")
+
+            if [ "$STATUS" = "running" ]; then
+                if [ "$HEALTH" = "healthy" ] || [ "$HEALTH" = "no-healthcheck" ]; then
+                    log_info "$CONTAINER: ${GREEN}running${NC} ($HEALTH)"
+                else
+                    log_warn "$CONTAINER: running but $HEALTH"
+                    EXIT_CODE=1
+                fi
+            else
+                log_error "$CONTAINER: $STATUS"
+                EXIT_CODE=2
+            fi
         else
-            # プロセスのリソース使用量確認
-            pids=$(pgrep -f "$pattern")
-            for pid in $pids; do
-                if ps -p "$pid" > /dev/null 2>&1; then
-                    cpu_usage=$(ps -p "$pid" -o %cpu= | tr -d ' ')
-                    memory_mb=$(ps -p "$pid" -o rss= | awk '{print $1/1024}')
-                    
-                    # 異常に高いリソース使用をチェック
-                    if (( $(echo "$cpu_usage > 50" | bc -l 2>/dev/null || echo 0) )); then
-                        send_alert "WARNING" "$name (PID:$pid) high CPU usage: ${cpu_usage}%"
-                    fi
-                    
-                    if (( $(echo "$memory_mb > 1000" | bc -l 2>/dev/null || echo 0) )); then
-                        send_alert "WARNING" "$name (PID:$pid) high memory usage: ${memory_mb}MB"
-                    fi
-                fi
-            done
+            log_error "$CONTAINER: コンテナが存在しません"
+            EXIT_CODE=2
         fi
     done
-}
 
-# 3. データベース接続監視
-monitor_databases() {
-    log_info "データベース接続監視中..."
-    
-    # PostgreSQL監視
-    if ! brew services list | grep postgresql | grep started > /dev/null; then
-        send_alert "CRITICAL" "PostgreSQL service is not running"
+    # Blue-Green バックエンド — アクティブスロットのみチェック
+    ACTIVE_SLOT_FILE="config/active-slot"
+    if [ -f "$ACTIVE_SLOT_FILE" ]; then
+        ACTIVE_SLOT=$(cat "$ACTIVE_SLOT_FILE")
+        ACTIVE_CONTAINER="bsf-backend-${ACTIVE_SLOT}"
+        if docker inspect "$ACTIVE_CONTAINER" > /dev/null 2>&1; then
+            STATUS=$(docker inspect -f '{{.State.Status}}' "$ACTIVE_CONTAINER")
+            HEALTH=$(docker inspect -f '{{.State.Health.Status}}' "$ACTIVE_CONTAINER" 2>/dev/null || echo "no-healthcheck")
+            if [ "$STATUS" = "running" ] && [ "$HEALTH" = "healthy" ]; then
+                log_info "$ACTIVE_CONTAINER (active): ${GREEN}running${NC} ($HEALTH)"
+            else
+                log_error "$ACTIVE_CONTAINER (active): $STATUS ($HEALTH)"
+                EXIT_CODE=2
+            fi
+        else
+            log_error "アクティブバックエンド '$ACTIVE_CONTAINER' が存在しません"
+            EXIT_CODE=2
+        fi
     else
-        # 簡易接続テスト
-        if ! pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
-            send_alert "WARNING" "PostgreSQL connection test failed"
-        fi
+        log_warn "active-slot ファイルが見つかりません（Blue-Green未初期化？）"
     fi
-    
-    # InfluxDB監視
-    if ! brew services list | grep influxdb | grep started > /dev/null; then
-        send_alert "CRITICAL" "InfluxDB service is not running"
+}
+
+# ─── PostgreSQL接続確認 ───
+check_postgresql() {
+    log_header "PostgreSQL"
+
+    CONTAINER_NAME="bsf-postgres"
+    if docker inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+        if docker exec "$CONTAINER_NAME" pg_isready -U bsf_user -d bsf_system > /dev/null 2>&1; then
+            log_info "PostgreSQL: ${GREEN}接続OK${NC}"
+
+            # DB サイズ
+            DB_SIZE=$(docker exec "$CONTAINER_NAME" psql -U bsf_user -d bsf_system -t -c "SELECT pg_size_pretty(pg_database_size('bsf_system'));" 2>/dev/null | tr -d ' ')
+            log_info "データベースサイズ: $DB_SIZE"
+
+            # アクティブ接続数
+            CONN_COUNT=$(docker exec "$CONTAINER_NAME" psql -U bsf_user -d bsf_system -t -c "SELECT count(*) FROM pg_stat_activity WHERE datname='bsf_system';" 2>/dev/null | tr -d ' ')
+            log_info "アクティブ接続数: $CONN_COUNT"
+        else
+            log_error "PostgreSQL: 接続失敗"
+            EXIT_CODE=2
+        fi
     else
-        # InfluxDB接続テスト
-        if ! curl -s http://localhost:8086/health > /dev/null; then
-            send_alert "WARNING" "InfluxDB connection test failed"
+        log_error "PostgreSQLコンテナが存在しません"
+        EXIT_CODE=2
+    fi
+}
+
+# ─── ヘルスチェック ───
+check_health_endpoints() {
+    log_header "ヘルスチェック"
+
+    # /health エンドポイント (port 3000 via router)
+    HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
+    if [ "$HEALTH_RESPONSE" = "200" ]; then
+        log_info "/health: ${GREEN}OK${NC} (HTTP $HEALTH_RESPONSE)"
+    else
+        log_error "/health: 応答なし (HTTP $HEALTH_RESPONSE)"
+        EXIT_CODE=2
+    fi
+
+    # /ready エンドポイント
+    READY_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ready 2>/dev/null || echo "000")
+    if [ "$READY_RESPONSE" = "200" ]; then
+        log_info "/ready: ${GREEN}OK${NC} (HTTP $READY_RESPONSE)"
+    else
+        log_warn "/ready: 未準備 (HTTP $READY_RESPONSE)"
+        EXIT_CODE=1
+    fi
+}
+
+# ─── バックアップ確認 ───
+check_backups() {
+    log_header "バックアップ"
+
+    BACKUP_DIR="${BSF_BACKUP_DIR:-$HOME/BSF_Backups}/postgres"
+    if [ -d "$BACKUP_DIR" ]; then
+        LATEST=$(ls -t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | head -1)
+        if [ -n "$LATEST" ]; then
+            LATEST_DATE=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$LATEST")
+            LATEST_SIZE=$(du -h "$LATEST" | cut -f1)
+            TOTAL_COUNT=$(ls "$BACKUP_DIR"/*.sql.gz 2>/dev/null | wc -l | tr -d ' ')
+            log_info "最新バックアップ: $(basename "$LATEST") ($LATEST_SIZE, $LATEST_DATE)"
+            log_info "バックアップ総数: ${TOTAL_COUNT}件"
+
+            # 24時間以上前の場合は警告
+            LATEST_EPOCH=$(stat -f "%m" "$LATEST")
+            NOW_EPOCH=$(date +%s)
+            DIFF_HOURS=$(( (NOW_EPOCH - LATEST_EPOCH) / 3600 ))
+            if [ "$DIFF_HOURS" -gt 25 ]; then
+                log_warn "最新バックアップが${DIFF_HOURS}時間前です（24時間以上経過）"
+                EXIT_CODE=1
+            fi
+        else
+            log_warn "バックアップファイルが見つかりません"
+            EXIT_CODE=1
         fi
+    else
+        log_warn "バックアップディレクトリが存在しません: $BACKUP_DIR"
     fi
 }
 
-# 4. ネットワーク監視
-monitor_network() {
-    log_info "ネットワーク接続監視中..."
-    
-    # HTTP API監視
-    if ! curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 2>/dev/null | grep -q "200\|404"; then
-        send_alert "CRITICAL" "HTTP API (port 8000) is not responding"
-    fi
-    
-    # MQTT TLS監視
-    if ! timeout 5 mosquitto_pub -h localhost -p 8883 --cafile certs/ca.crt -t "monitor/test" -m "test" > /dev/null 2>&1; then
-        send_alert "WARNING" "MQTT TLS (port 8883) connection failed"
-    fi
-    
-    # MQTT標準監視
-    if ! timeout 5 mosquitto_pub -h localhost -p 1883 -t "monitor/test" -m "test" > /dev/null 2>&1; then
-        send_alert "WARNING" "MQTT Standard (port 1883) connection failed"
-    fi
-}
+# ─── 実行 ───
+log_header "BSF-LoopTech システム監視 — $(date '+%Y-%m-%d %H:%M:%S')"
+check_system_resources
+check_docker_containers
+check_postgresql
+check_health_endpoints
+check_backups
 
-# 5. ログファイル監視
-monitor_log_files() {
-    log_info "ログファイル監視中..."
-    
-    LOG_FILES=(
-        "logs/application.log"
-        "logs/ml_pipeline.log"
-        "logs/mosquitto.log"
-        "logs/launchd_stderr.log"
-    )
-    
-    for log_file in "${LOG_FILES[@]}"; do
-        if [ -f "$log_file" ]; then
-            # ファイルサイズチェック
-            file_size_bytes=$(stat -f "%z" "$log_file" 2>/dev/null || echo "0")
-            file_size_mb=$((file_size_bytes / 1024 / 1024))
-            
-            if [ "$file_size_mb" -gt "$LOG_SIZE_THRESHOLD" ]; then
-                send_alert "WARNING" "Large log file detected: $log_file (${file_size_mb}MB)"
-            fi
-            
-            # 最新のエラーログチェック（過去1時間）
-            if [ -s "$log_file" ]; then
-                recent_errors=$(grep -i "error\|exception\|failed\|critical" "$log_file" | tail -10 | wc -l | tr -d ' ')
-                if [ "$recent_errors" -gt 5 ]; then
-                    send_alert "WARNING" "Multiple recent errors in $log_file ($recent_errors errors)"
-                fi
-            fi
-        fi
-    done
-}
+echo ""
+if [ $EXIT_CODE -eq 0 ]; then
+    log_info "全チェック ${GREEN}正常${NC}"
+elif [ $EXIT_CODE -eq 1 ]; then
+    log_warn "警告あり — 確認してください"
+else
+    log_error "異常検出 — 対応が必要です"
+fi
 
-# 6. ディスク容量監視
-monitor_disk_space() {
-    log_info "ディスク容量監視中..."
-    
-    # 重要なディレクトリの容量確認
-    DIRECTORIES=(
-        "logs:ログディレクトリ"
-        "data:データディレクトリ"
-        "model_registry:モデルレジストリ"
-        "backup:バックアップディレクトリ"
-    )
-    
-    for dir_info in "${DIRECTORIES[@]}"; do
-        IFS=':' read -r dir_path dir_name <<< "$dir_info"
-        
-        if [ -d "$dir_path" ]; then
-            dir_size_mb=$(du -sm "$dir_path" 2>/dev/null | cut -f1)
-            
-            # 1GB以上の場合アラート
-            if [ "$dir_size_mb" -gt 1024 ]; then
-                send_alert "INFO" "$dir_name is using ${dir_size_mb}MB of disk space"
-            fi
-        fi
-    done
-}
-
-# 7. システム稼働時間とパフォーマンス
-monitor_system_performance() {
-    log_info "システムパフォーマンス監視中..."
-    
-    # システム稼働時間
-    uptime_info=$(uptime)
-    load_average=$(echo "$uptime_info" | awk -F'load averages:' '{print $2}' | awk '{print $1}')
-    
-    # 負荷平均が2.0以上の場合アラート
-    if (( $(echo "$load_average > 2.0" | bc -l 2>/dev/null || echo 0) )); then
-        send_alert "WARNING" "High system load average: $load_average"
-    fi
-    
-    # 温度監視（macOSの場合、簡易版）
-    # Note: macOSでは温度センサーへの直接アクセスが制限されているため、
-    # システム負荷やファン速度で間接的に判断
-    
-    # パフォーマンス統計をログに記録
-    echo "[$CURRENT_TIME] Load:$load_average" >> "$MONITOR_LOG"
-}
-
-# メイン実行
-main() {
-    # ログディレクトリ作成
-    mkdir -p logs
-    
-    # 引数チェック
-    case "${1:-all}" in
-        "resources")
-            monitor_system_resources
-            ;;
-        "processes")
-            monitor_bsf_processes
-            ;;
-        "databases")
-            monitor_databases
-            ;;
-        "network")
-            monitor_network
-            ;;
-        "logs")
-            monitor_log_files
-            ;;
-        "disk")
-            monitor_disk_space
-            ;;
-        "performance")
-            monitor_system_performance
-            ;;
-        "all"|*)
-            log_header "BSF-LoopTech システム監視"
-            monitor_system_resources
-            monitor_bsf_processes
-            monitor_databases
-            monitor_network
-            monitor_log_files
-            monitor_disk_space
-            monitor_system_performance
-            
-            log_info "✅ 全監視項目完了"
-            
-            # アラート統計
-            if [ -f "$ALERT_LOG" ]; then
-                alert_count=$(grep "$(date '+%Y-%m-%d')" "$ALERT_LOG" | wc -l | tr -d ' ')
-                if [ "$alert_count" -gt 0 ]; then
-                    log_warn "本日のアラート数: $alert_count"
-                    log_info "詳細: $ALERT_LOG"
-                fi
-            fi
-            ;;
-    esac
-}
-
-# スクリプト実行
-main "$@"
+exit $EXIT_CODE

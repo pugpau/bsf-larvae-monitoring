@@ -24,6 +24,8 @@ class _BaseRepository:
 
     # Subclasses override to specify which columns are text-searchable
     _search_columns: list[str] = ["name"]
+    # Subclasses override to specify which columns are valid for sorting
+    _sortable_columns: list[str] = ["name", "created_at", "updated_at"]
 
     def __init__(self, session: AsyncSession, model_class):
         self.session = session
@@ -83,9 +85,9 @@ class _BaseRepository:
         total_result = await self.session.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        # Sorting
+        # Sorting (only allow columns in the allowlist)
         sort_col = None
-        if sort_by and hasattr(self.model_class, sort_by):
+        if sort_by and sort_by in self._sortable_columns and hasattr(self.model_class, sort_by):
             sort_col = getattr(self.model_class, sort_by)
         if sort_col is None:
             sort_col = self.model_class.created_at
@@ -140,6 +142,7 @@ class _BaseRepository:
 
 class SupplierRepository(_BaseRepository):
     _search_columns = ["name", "contact_person", "address"]
+    _sortable_columns = ["name", "contact_person", "is_active", "created_at", "updated_at"]
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, Supplier)
@@ -164,6 +167,7 @@ class SupplierRepository(_BaseRepository):
 
 class SolidificationMaterialRepository(_BaseRepository):
     _search_columns = ["name", "base_material", "notes"]
+    _sortable_columns = ["name", "material_type", "unit_cost", "is_active", "created_at", "updated_at"]
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, SolidificationMaterial)
@@ -191,6 +195,7 @@ class SolidificationMaterialRepository(_BaseRepository):
 
 class LeachingSuppressantRepository(_BaseRepository):
     _search_columns = ["name", "notes"]
+    _sortable_columns = ["name", "suppressant_type", "unit_cost", "is_active", "created_at", "updated_at"]
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, LeachingSuppressant)
@@ -284,9 +289,10 @@ class RecipeRepository:
         total_result = await self.session.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        # Sorting
+        # Sorting (allowlist for safety)
+        _recipe_sortable = {"name", "waste_type", "status", "created_at", "updated_at"}
         sort_col = None
-        if sort_by and hasattr(Recipe, sort_by):
+        if sort_by and sort_by in _recipe_sortable and hasattr(Recipe, sort_by):
             sort_col = getattr(Recipe, sort_by)
         if sort_col is None:
             sort_col = Recipe.created_at

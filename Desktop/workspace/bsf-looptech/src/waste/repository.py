@@ -4,8 +4,8 @@ Handles all database operations via SQLAlchemy async sessions.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from sqlalchemy import select, update, delete, desc
+from typing import Any, Dict, List, Optional, Tuple
+from sqlalchemy import func, or_, select, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -44,30 +44,90 @@ class WasteRepository:
             logger.error(f"Failed to create waste record: {e}")
             return None
 
+    _sortable_columns = {"delivery_date", "source", "waste_type", "status", "weight", "created_at", "updated_at"}
+
     async def get_all(
+        self,
+        q: Optional[str] = None,
+        status: Optional[str] = None,
+        waste_type: Optional[str] = None,
+        source: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: str = "desc",
+        limit: int = 200,
+        offset: int = 0,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Get waste records with search, filters, pagination, sorting.
+
+        Returns (items, total_count).
+        """
+        try:
+            stmt = select(WasteRecord)
+            count_stmt = select(func.count()).select_from(WasteRecord)
+
+            # Exact-match filters
+            if status:
+                stmt = stmt.where(WasteRecord.status == status)
+                count_stmt = count_stmt.where(WasteRecord.status == status)
+            if waste_type:
+                stmt = stmt.where(WasteRecord.waste_type == waste_type)
+                count_stmt = count_stmt.where(WasteRecord.waste_type == waste_type)
+            if source:
+                stmt = stmt.where(WasteRecord.source == source)
+                count_stmt = count_stmt.where(WasteRecord.source == source)
+
+            # Text search (ILIKE on source, waste_type, notes)
+            if q:
+                pattern = f"%{q}%"
+                search_filter = or_(
+                    WasteRecord.source.ilike(pattern),
+                    WasteRecord.waste_type.ilike(pattern),
+                    WasteRecord.notes.ilike(pattern),
+                )
+                stmt = stmt.where(search_filter)
+                count_stmt = count_stmt.where(search_filter)
+
+            # Total count (before pagination)
+            total_result = await self.session.execute(count_stmt)
+            total = total_result.scalar() or 0
+
+            # Sorting (allowlist for security)
+            sort_col = None
+            if sort_by and sort_by in self._sortable_columns and hasattr(WasteRecord, sort_by):
+                sort_col = getattr(WasteRecord, sort_by)
+            if sort_col is None:
+                sort_col = WasteRecord.delivery_date
+            stmt = stmt.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
+            # Pagination
+            stmt = stmt.offset(offset).limit(limit)
+
+            result = await self.session.execute(stmt)
+            records = result.scalars().all()
+            return [self._to_dict(r) for r in records], total
+        except Exception as e:
+            logger.error(f"Failed to get waste records: {e}")
+            return [], 0
+
+    async def get_all_for_export(
         self,
         status: Optional[str] = None,
         waste_type: Optional[str] = None,
         source: Optional[str] = None,
-        limit: int = 200,
-        offset: int = 0,
     ) -> List[Dict[str, Any]]:
-        """Get all waste records with optional filters."""
+        """Get all waste records without pagination (for CSV export)."""
         try:
-            query = select(WasteRecord).order_by(desc(WasteRecord.delivery_date))
+            stmt = select(WasteRecord).order_by(desc(WasteRecord.delivery_date))
             if status:
-                query = query.where(WasteRecord.status == status)
+                stmt = stmt.where(WasteRecord.status == status)
             if waste_type:
-                query = query.where(WasteRecord.waste_type == waste_type)
+                stmt = stmt.where(WasteRecord.waste_type == waste_type)
             if source:
-                query = query.where(WasteRecord.source == source)
-            query = query.limit(limit).offset(offset)
-
-            result = await self.session.execute(query)
-            records = result.scalars().all()
-            return [self._to_dict(r) for r in records]
+                stmt = stmt.where(WasteRecord.source == source)
+            result = await self.session.execute(stmt)
+            return [self._to_dict(r) for r in result.scalars().all()]
         except Exception as e:
-            logger.error(f"Failed to get waste records: {e}")
+            logger.error(f"Failed to export waste records: {e}")
             return []
 
     async def get_by_id(self, record_id: str) -> Optional[Dict[str, Any]]:

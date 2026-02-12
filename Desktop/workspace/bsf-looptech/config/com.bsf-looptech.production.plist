@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- BSF-LoopTech 本番環境 LaunchDaemon設定 -->
+    <!-- Docker Compose による Blue-Green デプロイメント -->
+
+    <key>Label</key>
+    <string>com.bsf-looptech.production</string>
+
+    <!-- Docker Compose で本番環境を起動 -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/docker</string>
+        <string>compose</string>
+        <string>-f</string>
+        <string>/Users/tonton/Desktop/workspace/bsf-looptech/docker-compose.prod.yml</string>
+        <string>--env-file</string>
+        <string>/Users/tonton/Desktop/workspace/bsf-looptech/.env.production</string>
+        <string>up</string>
+        <string>-d</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/tonton/Desktop/workspace/bsf-looptech</string>
+
+    <!-- システム起動時に実行 -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- 予期しない終了時のみ再起動 -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- ログ設定 -->
+    <key>StandardOutPath</key>
+    <string>/Users/tonton/Desktop/workspace/bsf-looptech/logs/launchd_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/tonton/Desktop/workspace/bsf-looptech/logs/launchd_stderr.log</string>
+
+    <!-- 環境変数 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+
+    <key>UserName</key>
+    <string>tonton</string>
+
+    <key>GroupName</key>
+    <string>staff</string>
+
+    <!-- 起動間隔制限（60秒） -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+
+    <!-- 終了タイムアウト -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+
+    <!-- Docker compose は子プロセスを管理 -->
+    <key>AbandonProcessGroup</key>
+    <true/>
+
+    <key>LaunchOnlyOnce</key>
+    <false/>
+</dict>
+</plist>

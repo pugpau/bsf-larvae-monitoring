@@ -2,7 +2,7 @@
  * Quality Management Dashboard — 品質管理
  * Overview of elution test compliance, formulation effectiveness, and regulatory status
  */
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box, Grid, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Chip, Alert
@@ -11,10 +11,17 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer
 } from 'recharts';
-import { getSubstrateBatches, ELUTION_THRESHOLDS } from '../../utils/storage';
+import { fetchWasteRecords } from '../../api/wasteApi';
+import { ELUTION_THRESHOLDS } from '../../constants/waste';
 
 const QualityDashboard = () => {
-  const records = useMemo(() => getSubstrateBatches(), []);
+  const [records, setRecords] = useState([]);
+
+  useEffect(() => {
+    fetchWasteRecords({ limit: 500, sort_by: 'delivery_date', sort_order: 'desc' })
+      .then(result => setRecords(result.items))
+      .catch(() => setRecords([]));
+  }, []);
 
   const analyzed = useMemo(() =>
     records.filter(r => r.analysis && Object.keys(r.analysis).length > 0),

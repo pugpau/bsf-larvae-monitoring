@@ -64,7 +64,10 @@ class TestWasteRecordEndpoints:
     async def test_get_waste_records(self, client):
         response = await client.get("/api/waste/records")
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        data = response.json()
+        assert "items" in data
+        assert "total" in data
+        assert isinstance(data["items"], list)
 
     async def test_recommend_requires_analysis(self, client):
         payload = {"analysis": {}, "wasteType": "汚泥（一般）"}
@@ -80,6 +83,76 @@ class TestWasteRecordEndpoints:
         assert "confidence" in data
         assert "method" in data
         assert data["method"] in ("similarity", "rule")
+
+
+@pytest.mark.integration
+class TestWasteSearchAndPagination:
+    async def test_search_by_query(self, client):
+        # Create test records
+        for name in ["東京工場", "大阪工場", "名古屋工場"]:
+            await client.post("/api/waste/records", json={
+                "source": name, "deliveryDate": "2026-02-01",
+                "wasteType": "汚泥（一般）", "weight": 5.0, "weightUnit": "t",
+            })
+        response = await client.get("/api/waste/records", params={"q": "東京"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 1
+        sources = [r["source"] for r in data["items"]]
+        assert any("東京" in s for s in sources)
+
+    async def test_pagination(self, client):
+        response = await client.get("/api/waste/records", params={"limit": 2, "offset": 0})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["limit"] == 2
+        assert data["offset"] == 0
+        assert len(data["items"]) <= 2
+
+    async def test_sort_order(self, client):
+        response = await client.get("/api/waste/records", params={
+            "sort_by": "source", "sort_order": "asc"
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+
+    async def test_invalid_sort_column_still_works(self, client):
+        response = await client.get("/api/waste/records", params={"sort_by": "DROP TABLE"})
+        assert response.status_code == 200
+
+
+@pytest.mark.integration
+class TestWasteCsvEndpoints:
+    async def test_csv_export(self, client):
+        await client.post("/api/waste/records", json={
+            "source": "CSV工場", "deliveryDate": "2026-02-05",
+            "wasteType": "焼却灰", "weight": 8.0, "weightUnit": "t",
+        })
+        response = await client.get("/api/waste/records/export/csv")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers.get("content-type", "")
+        content = response.text
+        assert "source" in content
+        assert "CSV工場" in content
+
+    async def test_csv_import(self, client):
+        csv_content = "source,deliveryDate,wasteType,weight,weightUnit\nインポート工場,2026-02-06,汚泥（一般）,3.0,t\n"
+        files = {"file": ("test.csv", csv_content.encode("utf-8"), "text/csv")}
+        response = await client.post("/api/waste/records/import/csv", files=files)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["imported"] >= 1
+        assert isinstance(data["errors"], list)
+
+    async def test_csv_import_missing_fields(self, client):
+        csv_content = "source,deliveryDate\nA,2026-01-01\n"
+        files = {"file": ("test.csv", csv_content.encode("utf-8"), "text/csv")}
+        response = await client.post("/api/waste/records/import/csv", files=files)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["skipped"] >= 1
+        assert len(data["errors"]) >= 1
 
 
 @pytest.mark.integration

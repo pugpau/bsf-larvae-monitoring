@@ -226,7 +226,7 @@ def log_database_error(logger: logging.Logger, operation: str, error: Exception,
             
         params = getattr(error, 'params', None)
         if params is not None:
-            error_data['sql_params'] = params
+            error_data['sql_params'] = "[REDACTED]"
     
     logger.error(
         f"Database operation failed: {operation}",
@@ -260,5 +260,4 @@ def log_api_response(logger: logging.Logger, method: str, path: str, status_code
     )
 
 
-# Initialize logging on import
-logger = setup_logging()
+logger = logging.getLogger(__name__)

@@ -5,21 +5,24 @@ Handles JWT tokens, password hashing, and security validations.
 
 import os
 import secrets
+import uuid
 from datetime import datetime, timedelta
-from typing import Optional, Union, Dict, Any
-from jose import JWTError, jwt
+from typing import Optional, Union, Dict, Any, Set
+import jwt
+from jwt.exceptions import PyJWTError
 from passlib.context import CryptContext
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.postgresql import get_async_session
 from src.auth.models import User, UserSession, LoginAttempt, APIKey, Permission
+from src.config import settings
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Security configuration
-SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+# Security configuration — single source of truth from settings
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
@@ -33,6 +36,21 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # HTTP Bearer token security
 # auto_error=False allows requests without token when SKIP_AUTH is enabled
 security = HTTPBearer(auto_error=False)
+
+# In-memory token blacklist (JTI set).
+# NOTE: Not shared across workers; acceptable for single-process closed-network deployment.
+# For multi-worker setups, replace with Redis-backed blacklist.
+_token_blacklist: Set[str] = set()
+
+
+def blacklist_token(jti: str) -> None:
+    """Add a token's JTI to the blacklist (called on logout)."""
+    _token_blacklist.add(jti)
+
+
+def is_token_blacklisted(jti: str) -> bool:
+    """Check if a token's JTI has been blacklisted."""
+    return jti in _token_blacklist
 
 
 class SecurityConfig:
@@ -100,31 +118,31 @@ def validate_password_strength(password: str) -> Dict[str, Any]:
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """Create JWT access token."""
+    """Create JWT access token with unique JTI for blacklisting support."""
     to_encode = data.copy()
-    
+
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=SecurityConfig.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expire, "type": "access"})
-    
+
+    to_encode.update({"exp": expire, "type": "access", "jti": str(uuid.uuid4())})
+
     encoded_jwt = jwt.encode(to_encode, SecurityConfig.SECRET_KEY, algorithm=SecurityConfig.ALGORITHM)
     return encoded_jwt
 
 
 def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """Create JWT refresh token."""
+    """Create JWT refresh token with unique JTI for blacklisting support."""
     to_encode = data.copy()
-    
+
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(days=SecurityConfig.REFRESH_TOKEN_EXPIRE_DAYS)
-    
-    to_encode.update({"exp": expire, "type": "refresh"})
-    
+
+    to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
+
     encoded_jwt = jwt.encode(to_encode, SecurityConfig.SECRET_KEY, algorithm=SecurityConfig.ALGORITHM)
     return encoded_jwt
 
@@ -133,22 +151,28 @@ def verify_token(token: str, token_type: str = "access") -> Optional[Dict[str, A
     """
     Verify and decode JWT token.
     Returns payload if valid, None if invalid.
+    Checks the in-memory blacklist for revoked tokens.
     """
     try:
         payload = jwt.decode(token, SecurityConfig.SECRET_KEY, algorithms=[SecurityConfig.ALGORITHM])
-        
+
         # Check token type
         if payload.get("type") != token_type:
             return None
-        
+
         # Check expiration
         exp = payload.get("exp")
         if exp is None or datetime.utcfromtimestamp(exp) < datetime.utcnow():
             return None
-        
+
+        # Check blacklist
+        jti = payload.get("jti")
+        if jti and is_token_blacklisted(jti):
+            return None
+
         return payload
-    
-    except JWTError as e:
+
+    except PyJWTError as e:
         logger.warning(f"JWT verification failed: {e}")
         return None
 
@@ -325,10 +349,10 @@ async def check_rate_limit(
     from sqlalchemy import text
     
     query = text("""
-        SELECT COUNT(*) 
-        FROM login_attempts 
-        WHERE user_id = :user_id 
-        AND timestamp > NOW() - INTERVAL ':window_minutes minutes'
+        SELECT COUNT(*)
+        FROM login_attempts
+        WHERE user_id = :user_id
+        AND timestamp > NOW() - INTERVAL '1 minute' * :window_minutes
     """)
     
     result = await session.execute(query, {

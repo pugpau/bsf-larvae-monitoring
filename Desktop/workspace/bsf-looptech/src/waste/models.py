@@ -55,30 +55,30 @@ class RecommendationRequest(BaseModel):
 
 class WasteRecordCreate(BaseModel):
     """Request model for creating a waste record."""
-    source: str
-    deliveryDate: str  # ISO date string
-    wasteType: str
+    source: str = Field(..., max_length=200)
+    deliveryDate: str = Field(..., max_length=20)  # ISO date string
+    wasteType: str = Field(..., max_length=100)
     weight: Optional[float] = None
-    weightUnit: str = "t"
-    status: str = "pending"
+    weightUnit: str = Field("t", max_length=10)
+    status: str = Field("pending", max_length=30)
     analysis: Optional[Dict[str, Any]] = None
     formulation: Optional[Dict[str, Any]] = None
     elutionResult: Optional[Dict[str, Any]] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=2000)
 
 
 class WasteRecordUpdate(BaseModel):
     """Request model for updating a waste record."""
-    source: Optional[str] = None
-    deliveryDate: Optional[str] = None
-    wasteType: Optional[str] = None
+    source: Optional[str] = Field(None, max_length=200)
+    deliveryDate: Optional[str] = Field(None, max_length=20)
+    wasteType: Optional[str] = Field(None, max_length=100)
     weight: Optional[float] = None
-    weightUnit: Optional[str] = None
-    status: Optional[str] = None
+    weightUnit: Optional[str] = Field(None, max_length=10)
+    status: Optional[str] = Field(None, max_length=30)
     analysis: Optional[Dict[str, Any]] = None
     formulation: Optional[Dict[str, Any]] = None
     elutionResult: Optional[Dict[str, Any]] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=2000)
 
 
 class WasteRecordResponse(BaseModel):

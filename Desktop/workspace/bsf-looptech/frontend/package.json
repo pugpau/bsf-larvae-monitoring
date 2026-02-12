@@ -26,7 +26,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "e2e": "npx playwright test",
+    "e2e:headed": "npx playwright test --headed"
   },
   "eslintConfig": {
     "extends": [
@@ -48,6 +50,7 @@
   },
   "proxy": "http://localhost:8001",
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "html-webpack-plugin": "^5.5.0",
     "typescript": "^5.9.3"
   }

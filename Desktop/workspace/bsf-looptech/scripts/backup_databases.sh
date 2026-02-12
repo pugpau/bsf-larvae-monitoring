@@ -1,19 +1,20 @@
 #!/bin/bash
 
 # BSF-LoopTech データベースバックアップスクリプト
-# Docker環境用
+# Docker環境用 — PostgreSQLのみ
+#
+# Usage: ./scripts/backup_databases.sh
+# Cron/launchd: config/com.bsf-looptech.backup.plist (daily 3:00 AM JST)
 
 set -e
 
 # 設定
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_DIR="/backups"
-POSTGRES_HOST="postgres"
-POSTGRES_USER="bsf_user"
-POSTGRES_DB="bsf_system"
-INFLUXDB_HOST="influxdb"
-INFLUXDB_ORG="bsf_org"
-INFLUXDB_BUCKET="bsf_data"
+BACKUP_DIR="${BSF_BACKUP_DIR:-$HOME/BSF_Backups}"
+CONTAINER_NAME="${BSF_POSTGRES_CONTAINER:-bsf-postgres}"
+POSTGRES_USER="${POSTGRES_USER:-bsf_user}"
+POSTGRES_DB="${POSTGRES_DB:-bsf_system}"
+RETENTION_DAYS=30
 
 # ログ関数
 log_info() {
@@ -25,37 +26,44 @@ log_error() {
 }
 
 # バックアップディレクトリ作成
-mkdir -p "${BACKUP_DIR}/postgres" "${BACKUP_DIR}/influxdb"
+mkdir -p "${BACKUP_DIR}/postgres"
 
-# PostgreSQLバックアップ
-log_info "Starting PostgreSQL backup..."
-if pg_dump -h "${POSTGRES_HOST}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-    --verbose --clean --if-exists --create \
-    > "${BACKUP_DIR}/postgres/bsf_postgres_${TIMESTAMP}.sql"; then
-    log_info "PostgreSQL backup completed: bsf_postgres_${TIMESTAMP}.sql"
-else
-    log_error "PostgreSQL backup failed"
+# Dockerコンテナの状態確認
+if ! docker inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+    log_error "PostgreSQLコンテナ '$CONTAINER_NAME' が見つかりません"
     exit 1
 fi
 
-# InfluxDBバックアップ (データエクスポート)
-log_info "Starting InfluxDB backup..."
-if curl -X POST "http://${INFLUXDB_HOST}:8086/api/v2/query" \
-    -H "Authorization: Token ${INFLUXDB_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d '{
-        "query": "from(bucket: \"'${INFLUXDB_BUCKET}'\") |> range(start: -30d)",
-        "type": "flux"
-    }' > "${BACKUP_DIR}/influxdb/bsf_influxdb_${TIMESTAMP}.json"; then
-    log_info "InfluxDB backup completed: bsf_influxdb_${TIMESTAMP}.json"
-else
-    log_error "InfluxDB backup failed"
+if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
+    log_error "PostgreSQLコンテナ '$CONTAINER_NAME' が起動していません"
     exit 1
 fi
 
-# 古いバックアップファイルの削除（30日以上前）
-log_info "Cleaning up old backup files..."
-find "${BACKUP_DIR}" -name "*.sql" -mtime +30 -delete
-find "${BACKUP_DIR}" -name "*.json" -mtime +30 -delete
+# PostgreSQLバックアップ（Docker exec経由）
+BACKUP_FILE="${BACKUP_DIR}/postgres/bsf_${TIMESTAMP}.sql.gz"
+log_info "PostgreSQLバックアップを開始します..."
 
-log_info "Backup process completed successfully"
+if docker exec "$CONTAINER_NAME" \
+    pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    --verbose --clean --if-exists --create 2>/dev/null \
+    | gzip > "$BACKUP_FILE"; then
+
+    BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+    log_info "PostgreSQLバックアップ完了: $(basename "$BACKUP_FILE") ($BACKUP_SIZE)"
+else
+    log_error "PostgreSQLバックアップ失敗"
+    rm -f "$BACKUP_FILE"
+    exit 1
+fi
+
+# 古いバックアップファイルの削除
+log_info "古いバックアップを削除中（${RETENTION_DAYS}日以上前）..."
+DELETED_COUNT=$(find "${BACKUP_DIR}/postgres" -name "*.sql.gz" -mtime +${RETENTION_DAYS} -delete -print | wc -l | tr -d ' ')
+if [ "$DELETED_COUNT" -gt 0 ]; then
+    log_info "  ${DELETED_COUNT}件の古いバックアップを削除しました"
+fi
+
+# バックアップ一覧を表示
+TOTAL_BACKUPS=$(find "${BACKUP_DIR}/postgres" -name "*.sql.gz" | wc -l | tr -d ' ')
+TOTAL_SIZE=$(du -sh "${BACKUP_DIR}/postgres" 2>/dev/null | cut -f1)
+log_info "バックアップ完了 — 合計: ${TOTAL_BACKUPS}件 (${TOTAL_SIZE})"

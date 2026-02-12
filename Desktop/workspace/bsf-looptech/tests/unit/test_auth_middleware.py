@@ -1,7 +1,7 @@
 """
 Unit tests for authentication middleware classes.
-Tests AuthenticationMiddleware, RateLimitMiddleware, CORSSecurityMiddleware,
-and PermissionMiddleware helper methods.
+Tests AuthenticationMiddleware, RateLimitMiddleware,
+PermissionMiddleware helper methods, and shared get_client_ip utility.
 """
 
 import time
@@ -12,10 +12,10 @@ from starlette.responses import Response
 
 from src.auth.middleware import (
     AuthenticationMiddleware,
-    CORSSecurityMiddleware,
     RateLimitMiddleware,
 )
 from src.auth.security import SecurityHeaders
+from src.utils.request import get_client_ip
 
 
 # ---------------------------------------------------------------------------
@@ -87,29 +87,30 @@ class TestAuthMiddlewareExemptPaths:
 
 @pytest.mark.unit
 @pytest.mark.auth
-class TestAuthMiddlewareClientIP:
-    def test_ip_from_x_forwarded_for(self):
-        mw = AuthenticationMiddleware(MagicMock())
-        request = _make_request(headers={"X-Forwarded-For": "10.0.0.1, 192.168.1.1"})
-        assert mw._get_client_ip(request) == "10.0.0.1"
+class TestGetClientIP:
+    """Tests for the shared get_client_ip utility (src.utils.request)."""
 
     def test_ip_from_x_real_ip(self):
-        mw = AuthenticationMiddleware(MagicMock())
         request = _make_request(headers={"X-Real-IP": "10.0.0.2"})
-        assert mw._get_client_ip(request) == "10.0.0.2"
+        assert get_client_ip(request) == "10.0.0.2"
 
     def test_ip_from_client_host(self):
-        mw = AuthenticationMiddleware(MagicMock())
         request = _make_request(client_host="192.168.0.10")
-        assert mw._get_client_ip(request) == "192.168.0.10"
+        assert get_client_ip(request) == "192.168.0.10"
 
     def test_ip_unknown_fallback(self):
-        mw = AuthenticationMiddleware(MagicMock())
         request = _make_request()
-        # Remove client.host
         del request.client.host
         request.client = MagicMock(spec=[])
-        assert mw._get_client_ip(request) == "unknown"
+        assert get_client_ip(request) == "unknown"
+
+    def test_x_forwarded_for_ignored(self):
+        """X-Forwarded-For is NOT trusted (spoofable); only X-Real-IP is."""
+        request = _make_request(
+            headers={"X-Forwarded-For": "10.0.0.1"},
+            client_host="192.168.1.1",
+        )
+        assert get_client_ip(request) == "192.168.1.1"
 
 
 @pytest.mark.unit
@@ -146,23 +147,6 @@ class TestRateLimitMiddleware:
         mw = RateLimitMiddleware(MagicMock(), requests_per_minute=10)
         assert mw.requests_per_minute == 10
 
-    def test_get_client_ip_forwarded(self):
-        mw = RateLimitMiddleware(MagicMock())
-        request = _make_request(headers={"X-Forwarded-For": "1.2.3.4"})
-        assert mw._get_client_ip(request) == "1.2.3.4"
-
-    def test_get_client_ip_direct(self):
-        mw = RateLimitMiddleware(MagicMock())
-        request = _make_request(client_host="5.6.7.8")
-        assert mw._get_client_ip(request) == "5.6.7.8"
-
-    def test_get_client_ip_unknown(self):
-        mw = RateLimitMiddleware(MagicMock())
-        request = MagicMock()
-        request.headers = {}
-        request.client = MagicMock(spec=[])
-        assert mw._get_client_ip(request) == "unknown"
-
     @pytest.mark.asyncio
     async def test_dispatch_allows_within_limit(self):
         mw = RateLimitMiddleware(MagicMock(), requests_per_minute=100)
@@ -192,38 +176,3 @@ class TestRateLimitMiddleware:
         assert resp2.status_code == 429
 
 
-# ===========================================================================
-# CORSSecurityMiddleware
-# ===========================================================================
-
-
-@pytest.mark.unit
-@pytest.mark.auth
-class TestCORSSecurityMiddleware:
-    def test_default_allowed_origins(self):
-        mw = CORSSecurityMiddleware(MagicMock())
-        assert "http://localhost:3000" in mw.allowed_origins
-
-    def test_custom_allowed_origins(self):
-        mw = CORSSecurityMiddleware(MagicMock(), allowed_origins=["https://example.com"])
-        assert mw._is_allowed_origin("https://example.com") is True
-        assert mw._is_allowed_origin("https://evil.com") is False
-
-    def test_wildcard_origin(self):
-        mw = CORSSecurityMiddleware(MagicMock(), allowed_origins=["*"])
-        assert mw._is_allowed_origin("https://anything.com") is True
-
-    def test_is_allowed_origin_false(self):
-        mw = CORSSecurityMiddleware(MagicMock())
-        assert mw._is_allowed_origin("https://evil.com") is False
-
-    def test_default_methods(self):
-        mw = CORSSecurityMiddleware(MagicMock())
-        assert "GET" in mw.allowed_methods
-        assert "POST" in mw.allowed_methods
-        assert "DELETE" in mw.allowed_methods
-
-    def test_default_headers(self):
-        mw = CORSSecurityMiddleware(MagicMock())
-        assert "Authorization" in mw.allowed_headers
-        assert "Content-Type" in mw.allowed_headers

@@ -6,7 +6,7 @@ Phase 2 additions: search, pagination, sorting, CSV export/import.
 import csv
 import io
 import json
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -30,6 +30,8 @@ from src.materials.schemas import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["materials"])
+
+MAX_CSV_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 # ── Dependencies ──
@@ -78,6 +80,36 @@ def _csv_response(buf: io.StringIO, filename: str) -> StreamingResponse:
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+async def _import_csv(
+    file: UploadFile,
+    repo,
+    required_fields: list[str],
+    row_transformer: Callable[[dict[str, str]], dict],
+) -> dict:
+    """Shared CSV import logic: read file, validate required fields, transform rows, create entities."""
+    raw = await file.read()
+    if len(raw) > MAX_CSV_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File too large. Maximum is {MAX_CSV_UPLOAD_BYTES} bytes.")
+    content = raw.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+    imported, skipped, errors = 0, 0, []
+    for i, row in enumerate(reader, start=2):
+        missing = [f for f in required_fields if not row.get(f, "").strip()]
+        if missing:
+            skipped += 1
+            fields_str = " and ".join(missing) if len(missing) <= 2 else ", ".join(missing)
+            errors.append(f"Row {i}: {fields_str} {'is' if len(missing) == 1 else 'are'} required")
+            continue
+        try:
+            data = row_transformer(row)
+            await repo.create(data)
+            imported += 1
+        except Exception as e:
+            skipped += 1
+            errors.append(f"Row {i}: {str(e)[:100]}")
+    return {"imported": imported, "skipped": skipped, "errors": errors[:20]}
 
 
 # ══════════════════════════════════════════════
@@ -130,33 +162,19 @@ async def import_suppliers_csv(
     file: UploadFile = File(...),
     repo: SupplierRepository = Depends(get_supplier_repo),
 ):
-    content = (await file.read()).decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(content))
-    imported, skipped, errors = 0, 0, []
-    for i, row in enumerate(reader, start=2):
-        name = row.get("name", "").strip()
-        if not name:
-            skipped += 1
-            errors.append(f"Row {i}: name is required")
-            continue
-        try:
-            waste_types = json.loads(row.get("waste_types", "[]")) if row.get("waste_types") else []
-            data = {
-                "name": name,
-                "contact_person": row.get("contact_person") or None,
-                "phone": row.get("phone") or None,
-                "email": row.get("email") or None,
-                "address": row.get("address") or None,
-                "waste_types": waste_types,
-                "notes": row.get("notes") or None,
-                "is_active": row.get("is_active", "true").lower() in ("true", "1", "yes"),
-            }
-            await repo.create(data)
-            imported += 1
-        except Exception as e:
-            skipped += 1
-            errors.append(f"Row {i}: {str(e)[:100]}")
-    return {"imported": imported, "skipped": skipped, "errors": errors[:20]}
+    def transform(row: dict[str, str]) -> dict:
+        waste_types = json.loads(row.get("waste_types", "[]")) if row.get("waste_types") else []
+        return {
+            "name": row["name"].strip(),
+            "contact_person": row.get("contact_person") or None,
+            "phone": row.get("phone") or None,
+            "email": row.get("email") or None,
+            "address": row.get("address") or None,
+            "waste_types": waste_types,
+            "notes": row.get("notes") or None,
+            "is_active": row.get("is_active", "true").lower() in ("true", "1", "yes"),
+        }
+    return await _import_csv(file, repo, ["name"], transform)
 
 
 @router.get("/suppliers/{supplier_id}", response_model=SupplierResponse)
@@ -250,34 +268,19 @@ async def import_solidification_csv(
     file: UploadFile = File(...),
     repo: SolidificationMaterialRepository = Depends(get_solidification_repo),
 ):
-    content = (await file.read()).decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(content))
-    imported, skipped, errors = 0, 0, []
-    for i, row in enumerate(reader, start=2):
-        name = row.get("name", "").strip()
-        material_type = row.get("material_type", "").strip()
-        if not name or not material_type:
-            skipped += 1
-            errors.append(f"Row {i}: name and material_type are required")
-            continue
-        try:
-            data = {
-                "name": name,
-                "material_type": material_type,
-                "base_material": row.get("base_material") or None,
-                "min_addition_rate": float(row["min_addition_rate"]) if row.get("min_addition_rate") else None,
-                "max_addition_rate": float(row["max_addition_rate"]) if row.get("max_addition_rate") else None,
-                "unit_cost": float(row["unit_cost"]) if row.get("unit_cost") else None,
-                "unit": row.get("unit") or "kg",
-                "notes": row.get("notes") or None,
-                "is_active": row.get("is_active", "true").lower() in ("true", "1", "yes"),
-            }
-            await repo.create(data)
-            imported += 1
-        except Exception as e:
-            skipped += 1
-            errors.append(f"Row {i}: {str(e)[:100]}")
-    return {"imported": imported, "skipped": skipped, "errors": errors[:20]}
+    def transform(row: dict[str, str]) -> dict:
+        return {
+            "name": row["name"].strip(),
+            "material_type": row["material_type"].strip(),
+            "base_material": row.get("base_material") or None,
+            "min_addition_rate": float(row["min_addition_rate"]) if row.get("min_addition_rate") else None,
+            "max_addition_rate": float(row["max_addition_rate"]) if row.get("max_addition_rate") else None,
+            "unit_cost": float(row["unit_cost"]) if row.get("unit_cost") else None,
+            "unit": row.get("unit") or "kg",
+            "notes": row.get("notes") or None,
+            "is_active": row.get("is_active", "true").lower() in ("true", "1", "yes"),
+        }
+    return await _import_csv(file, repo, ["name", "material_type"], transform)
 
 
 @router.get("/solidification-materials/{item_id}", response_model=SolidificationMaterialResponse)
@@ -372,37 +375,22 @@ async def import_suppressants_csv(
     file: UploadFile = File(...),
     repo: LeachingSuppressantRepository = Depends(get_suppressant_repo),
 ):
-    content = (await file.read()).decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(content))
-    imported, skipped, errors = 0, 0, []
-    for i, row in enumerate(reader, start=2):
-        name = row.get("name", "").strip()
-        suppressant_type = row.get("suppressant_type", "").strip()
-        if not name or not suppressant_type:
-            skipped += 1
-            errors.append(f"Row {i}: name and suppressant_type are required")
-            continue
-        try:
-            target_metals = json.loads(row.get("target_metals", "[]")) if row.get("target_metals") else []
-            data = {
-                "name": name,
-                "suppressant_type": suppressant_type,
-                "target_metals": target_metals,
-                "min_addition_rate": float(row["min_addition_rate"]) if row.get("min_addition_rate") else None,
-                "max_addition_rate": float(row["max_addition_rate"]) if row.get("max_addition_rate") else None,
-                "ph_range_min": float(row["ph_range_min"]) if row.get("ph_range_min") else None,
-                "ph_range_max": float(row["ph_range_max"]) if row.get("ph_range_max") else None,
-                "unit_cost": float(row["unit_cost"]) if row.get("unit_cost") else None,
-                "unit": row.get("unit") or "kg",
-                "notes": row.get("notes") or None,
-                "is_active": row.get("is_active", "true").lower() in ("true", "1", "yes"),
-            }
-            await repo.create(data)
-            imported += 1
-        except Exception as e:
-            skipped += 1
-            errors.append(f"Row {i}: {str(e)[:100]}")
-    return {"imported": imported, "skipped": skipped, "errors": errors[:20]}
+    def transform(row: dict[str, str]) -> dict:
+        target_metals = json.loads(row.get("target_metals", "[]")) if row.get("target_metals") else []
+        return {
+            "name": row["name"].strip(),
+            "suppressant_type": row["suppressant_type"].strip(),
+            "target_metals": target_metals,
+            "min_addition_rate": float(row["min_addition_rate"]) if row.get("min_addition_rate") else None,
+            "max_addition_rate": float(row["max_addition_rate"]) if row.get("max_addition_rate") else None,
+            "ph_range_min": float(row["ph_range_min"]) if row.get("ph_range_min") else None,
+            "ph_range_max": float(row["ph_range_max"]) if row.get("ph_range_max") else None,
+            "unit_cost": float(row["unit_cost"]) if row.get("unit_cost") else None,
+            "unit": row.get("unit") or "kg",
+            "notes": row.get("notes") or None,
+            "is_active": row.get("is_active", "true").lower() in ("true", "1", "yes"),
+        }
+    return await _import_csv(file, repo, ["name", "suppressant_type"], transform)
 
 
 @router.get("/leaching-suppressants/{item_id}", response_model=LeachingSuppressantResponse)

@@ -15,7 +15,7 @@ RUN npm ci
 # Copy source code
 COPY public/ ./public/
 COPY src/ ./src/
-COPY .env* ./
+COPY tsconfig*.json ./
 
 # Build application with production optimizations
 ENV NODE_ENV=production

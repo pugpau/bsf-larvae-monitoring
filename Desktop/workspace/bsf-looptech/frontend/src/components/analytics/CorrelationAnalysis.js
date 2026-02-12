@@ -2,7 +2,7 @@
  * Waste Treatment Correlation Analysis
  * Analyzes relationships between waste analysis values and formulation quantities
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box, Grid, Typography, FormControl, InputLabel, Select, MenuItem,
   Button, ButtonGroup, Alert, Table, TableBody, TableCell,
@@ -14,7 +14,8 @@ import {
   BarChart, Bar, Cell, ReferenceLine
 } from 'recharts';
 import { Download as DownloadIcon } from '@mui/icons-material';
-import { getSubstrateBatches, ELUTION_THRESHOLDS } from '../../utils/storage';
+import { fetchWasteRecords } from '../../api/wasteApi';
+import { ELUTION_THRESHOLDS } from '../../constants/waste';
 
 // Chart colors from MASTER.md design system
 const CHART_COLORS = [
@@ -97,14 +98,21 @@ const CorrelationAnalysis = () => {
   const [viewMode, setViewMode] = useState('scatter');
   const [wasteTypeFilter, setWasteTypeFilter] = useState('all');
 
+  const [allRecords, setAllRecords] = useState([]);
+
+  useEffect(() => {
+    fetchWasteRecords({ limit: 500, sort_by: 'delivery_date', sort_order: 'desc' })
+      .then(result => setAllRecords(result.items))
+      .catch(() => setAllRecords([]));
+  }, []);
+
   const records = useMemo(() => {
-    const all = getSubstrateBatches();
-    return all.filter(r =>
+    return allRecords.filter(r =>
       r.status === 'formulated' &&
       r.analysis && Object.keys(r.analysis).length > 0 &&
       r.formulation
     );
-  }, []);
+  }, [allRecords]);
 
   const filteredRecords = useMemo(() => {
     if (wasteTypeFilter === 'all') return records;

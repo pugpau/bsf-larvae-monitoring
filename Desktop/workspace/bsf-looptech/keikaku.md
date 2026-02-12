@@ -115,13 +115,14 @@
 |---|------|----------|
 | Frontend | React + MUI v5 | 18.x (JS/TSX混在) |
 | Backend | FastAPI + SQLAlchemy async | 0.100+ / 2.0 |
-| DB | PostgreSQL | 15（13テーブル: 既存11 + ml_models + ml_predictions） |
+| DB | PostgreSQL + pgvector | 15（16テーブル: 既存11 + ML 2 + RAG 3） |
 | Auth | JWT + API Key + RBAC | bcrypt |
 | AI/ML | scikit-learn RF + PuLP最適化 + similarity/rule fallback | Phase 3完了 |
+| RAG/LLM | LangChain + pgvector + LM Studio | Phase 4完了 |
 | Infra | Docker Compose (Blue-Green) | 5サービス構成 (prod) |
-| Test | pytest + pytest-asyncio + pytest-cov | 448テスト / 80%+カバレッジ |
+| Test | pytest + pytest-asyncio + Playwright | 583テスト / 80%+カバレッジ |
 
-### 現在のDB構造（11テーブル）
+### 現在のDB構造（16テーブル）
 
 ```
 # 認証系
@@ -133,6 +134,12 @@ waste_records, material_types
 # Phase 1 拡張（マスタ・配合管理）
 suppliers, solidification_materials, leaching_suppressants
 recipes, recipe_details
+
+# Phase 3 ML
+ml_models, ml_predictions
+
+# Phase 4 RAG/Chat
+substrate_knowledge, chat_sessions, chat_messages
 ```
 
 ---
@@ -177,26 +184,62 @@ recipes, recipe_details
       ├── LM Studio gpt-oss-20b ~45 tok/s ベンチマーク ✅
       ├── LangChain ChatOpenAI 統合テスト ✅
       ├── nomic-embed-text-v1.5 (dim=768) embedding確認 ✅
-      └── メモリ: LM Studio ~25GB, 残り ~8GB/32GB ✅
+      ├── メモリ: LM Studio ~25GB, 残り ~8GB/32GB ✅
+      └── 本番統合（2月追加） ✅
+           ├── HNSW ベクトルインデックス（Alembic migration） ✅
+           ├── /health LLM 疎通チェック追加 ✅
+           ├── .env.example 全変数追加 ✅
+           ├── ナレッジ CSV 一括インポート API ✅
+           ├── get_embeddings_batch 並行化（Semaphore(5)） ✅
+           └── テスト +15件（595テスト全パス） ✅
 
- ─── ここから未着手 ───
+ 2月  Phase 4 RAG/LLMチャット ★前倒し完了★ ✅
+      ├── Rate Limiter設定化（Integration test 429問題解消） ✅
+      ├── DB 3テーブル + Alembic migration ✅
+      ├── src/rag/ 8ファイル（embedding, chain, repo, seeder） ✅
+      ├── Chat API 9エンドポイント（sessions, ask, knowledge） ✅
+      ├── テスト +61件（509テスト全パス） ✅
+      ├── apiClient.js Chat/Knowledge API追加 ✅
+      └── チャットUI（FAB + Drawer: 4 TSXコンポーネント） ✅
 
- 8月  Phase 4-B: RAG + LLMチャット（PuLP完了済み、LLMに集中）
-      ├── [SD-4] LangChain + embedding パイプライン
-      ├── pgvector ベクトルストア統合
-      ├── LLMチャットUI（会話履歴、参照元表示）
-      └── [SD-5] バッチ処理基盤設計（Phase 5準備）
+ 2月  Phase 5 ★前倒し完了★ ✅
+      ├── Phase 5-1: APSchedulerバッチ処理 ✅
+      ├── Phase 5-2: KPIダッシュボード ✅
+      ├── Phase 5-3: 本番デプロイ準備（SSL/launchd/運用マニュアル） ✅
+      └── Phase 5-4: 受入テスト（E2E/パフォーマンス/セキュリティ） ✅
 
- 9月  Phase 5: バッチ処理 + KPI + 本番デプロイ
-      ├── APScheduler統合（日次/週次/月次）
-      ├── KPIダッシュボード
-      ├── Mac mini 本番環境構築
-      └── 受入テスト + 運用マニュアル
+ 2月  セキュリティ監査 ★全フェーズ完了★ ✅
+      ├── Phase A (CRITICAL 5件): 認証バイパス修正、SECRET_KEY統一、SQL注入修正 ✅
+      ├── Phase B (HIGH 12件): CSV制限、LLMエラー漏洩、CSP厳格化、CORS等 ✅
+      ├── Phase C (MEDIUM 15件): JTI blacklist、sort allowlist、入力制限等 ✅
+      └── Phase D (長期 4件): PyJWT移行、UserResponse分割、httpOnly cookie ✅
+           566テスト全パス（447 unit + 119 integration）
+
+ 2月  リファクタリング ★完了★ ✅
+      ├── useNotification 共通フック抽出（8画面の重複削減） ✅
+      ├── useCrudList<T,F> ジェネリックフック（マスタ3画面 -528行） ✅
+      ├── 共通コンポーネント（CrudListToolbar, ConfirmDeleteDialog, NotificationSnackbar） ✅
+      ├── WASTE_TYPES 定数共有化（MLPredictionPanel + OptimizationPanel） ✅
+      ├── API Client統合（createAuthenticatedClient + token refresh mutex） ✅
+      ├── CSV import helper（_import_csv 共通関数化） ✅
+      └── バックエンド cleanup（logging二重初期化修正） ✅
+
+ 2月  搬入管理モダナイゼーション ★完了★ ✅
+      ├── Dead code削除（SubstrateTypeList.js, SubstrateTypeForm.js, BatchComparison.js） ✅
+      ├── Waste API拡張（PaginatedResponse + ILIKE検索 + CSV export/import） ✅
+      ├── wasteApi.ts 新規作成（TypeScript API層、createAuthenticatedClient使用） ✅
+      ├── SubstrateBatchList.tsx TSX化 + 直接API接続 ✅
+      ├── SubstrateBatchForm.tsx TSX化 + 直接API接続 ✅
+      ├── 分析コンポーネント移行（AnalyticsDashboard.js + CorrelationAnalysis.js → async API） ✅
+      ├── storage.js 完全削除（684行 → localStorage依存ゼロ） ✅
+      └── テスト追加（+17: 10 unit search/pagination + 7 integration CSV/search） ✅
+           583テスト（457 unit + 126 integration）
 
  9/30 ──────────────────── 納品期限
 
- ★ Phase 3 + CI/CD + Blue-Green が4ヶ月前倒し完了。
-   バッファ 2.0人月 → 4.0+人月に拡大。Phase 4 LLMリスクに余裕あり。
+ ★★★ Phase 1〜5 + セキュリティ監査 + リファクタリング + モダナイゼーション 全て2月中に前倒し完了。★★★
+   納品期限（9/30）まで7ヶ月のバッファ。
+   583テスト（457 unit + 126 integration）。
 ```
 
 ---
@@ -358,7 +401,7 @@ Phase3-6: テスト ✅（2月完了）
 
 ---
 
-### Phase 4: RAG + LLMチャット（8月 / 4.6人月 → 見込み4.5人月）
+### Phase 4: RAG + LLMチャット（8月 / 4.6人月 → 実績: 2月完了 ★6ヶ月前倒し★）
 
 #### 目標
 RAG + LLMによる知識ベースチャット（PuLP最適化は7月に完了済み [SD-5]）
@@ -366,24 +409,30 @@ RAG + LLMによる知識ベースチャット（PuLP最適化は7月に完了済
 #### タスク一覧
 
 ```
-Phase4-1: [SD-4] RAG基盤構築
-  - pgvector 拡張（Phase 2-6で検証済み）
-  - LangChain + テキスト分割 + embedding
-  - ベクトルストア: PGVector
-  - LLMアダプターパターン（LangChainで自然に実現）
-Phase4-2: LLMチャット
+Phase4-1: [SD-4] RAG基盤構築 ✅（2月完了）
+  - DB 3テーブル追加: substrate_knowledge, chat_sessions, chat_messages
+  - Alembic migration + pgvector vector(768) カラム
+  - src/rag/ 8ファイル: embedding, text_splitter, knowledge_repo,
+    chat_repo, chain, schemas, knowledge_seeder
+  - pgvector cosine search (<=>)  + LOWER(LIKE) テキストフォールバック
+Phase4-2: LLMチャット ✅（2月完了）
   - LM Studio + openai/gpt-oss-20b（ローカル推論）
-  - エンドポイント: http://127.0.0.1:1234
-  - LangChain接続: ChatOpenAI(base_url="http://127.0.0.1:1234/v1", model="openai/gpt-oss-20b")
-  - 閉域ネットワーク対応（完全ローカル、外部通信なし）
-Phase4-3: チャットUI
-  - RAG検索 + LLM応答の統合UI
-  - 会話履歴管理
-  - 参照元ドキュメント表示
-Phase4-4: テスト
-  - RAG検索精度テスト
-  - LLM応答品質テスト
-  - メモリ使用量モニタリング
+  - RAG chain: search_knowledge → build_context → _call_llm
+  - SSE streaming対応（ask/stream エンドポイント）
+  - Rate Limiter設定化（RATE_LIMIT_PER_MINUTE env var）
+  - Chat API 9エンドポイント: sessions CRUD + ask + ask/stream + knowledge CRUD + seed
+Phase4-3: チャットUI ✅（2月完了）
+  - FAB + Drawer パターン（5タブ構造に影響なし）
+  - 4 TSX: ChatFab, ChatDrawer, ChatMessageList, ChatInput
+  - セッション管理（一覧・作成・削除）
+  - メッセージ表示（ユーザー右寄せ / AI左寄せ）
+  - コンテキスト参照 Accordion表示
+  - 自動スクロール + TypingIndicator
+Phase4-4: テスト ✅（2月完了）
+  - +61テスト追加（448→509テスト）
+  - RAG: 12 knowledge repo + 8 chat repo + 11 chain + 4 text_splitter
+  - Integration: 13 chat API + 13 knowledge API
+  - apiClient.js: Chat/Knowledge API 9関数追加
 ```
 
 #### リスク評価（更新版）
@@ -408,32 +457,50 @@ OS + フロントエンド:          4GB
 
 ---
 
-### Phase 5: バッチ処理+KPIダッシュボード（9月 / 2.9人月 → 見込み2.7人月）
+### Phase 5: バッチ処理+KPIダッシュボード+本番（9月 / 2.9人月 → 実績: 2月完了 ★7ヶ月前倒し★）
 
 #### 目標
-定期バッチ処理、KPIダッシュボード、本番デプロイ
+定期バッチ処理、KPIダッシュボード、本番デプロイ、受入テスト
+
+#### 前提: 既存資産の活用
+
+- TrendAnalysis.tsx / PredictionAccuracy.tsx → ML系KPIは既存（Tab 2）
+- Blue-Greenデプロイ基盤 → scripts/ に一式あり
+- 運用スクリプト → backup_databases.sh, system_monitor.sh, maintenance.sh 等
 
 #### タスク一覧
 
 ```
-Phase5-1: バッチ処理
-  - APScheduler（閉域のため軽量版）
-  - 日次: データ集計、レポート生成
-  - 週次: モデル再学習トリガー
-  - 月次: 統計レポート自動生成
-Phase5-2: KPIダッシュボード
-  - リアルタイムKPI: 処理量、成功率、コスト
-  - 月次トレンド: グラフ可視化
-  - アラート: 基準値逸脱通知
-Phase5-3: 本番デプロイ
-  - Mac mini 環境構築
-  - Docker Compose 本番設定
-  - バックアップ・リストア手順（pg_dump + cron）
-  - 運用マニュアル
-Phase5-4: 受入テスト
-  - 全機能E2Eテスト
-  - パフォーマンステスト
-  - セキュリティ監査
+Phase5-1: バッチ処理（APScheduler） ✅（2月完了）
+  - apscheduler>=3.10.0 追加
+  - src/batch/ モジュール: scheduler.py, jobs.py, schemas.py
+  - AsyncIOScheduler（FastAPI lifespan 統合）
+  - 日次(03:00): データ集計 + 基準値逸脱チェック
+  - 週次(Sun 02:00): MLモデル再学習トリガー
+  - 月次(1st 04:00): 統計レポート自動生成
+  - バッチ管理API 4エンドポイント + 26テスト追加
+
+Phase5-2: KPIダッシュボード ✅（2月完了）
+  - src/kpi/ モジュール: schemas.py, service.py
+  - KPI API 3エンドポイント: realtime, trends, alerts
+  - 6 KPI指標 + KPIDashboard.tsx（30秒ポーリング）
+  - Tab 2（分析ダッシュボード）に統合 + 25テスト追加
+
+Phase5-3: 本番デプロイ（Mac mini） ✅（2月完了）
+  - SSL自己署名証明書 + nginx HTTPS対応
+  - .env.production Docker互換テンプレート
+  - backup_databases.sh + system_monitor.sh（Docker対応）
+  - 3 launchd plist: production, monitor(30分), backup(daily 3AM)
+  - OPERATIONS_MANUAL.md 10セクション統合リライト
+  - Dead scripts/docs 完全削除
+
+Phase5-4: 受入テスト ✅（2月完了）
+  - E2Eテスト基盤: Playwright (chromium) + 5 spec ファイル
+  - パフォーマンステスト: 20テスト全パス（全API <500ms）
+  - セキュリティ監査: bandit HIGH/CRITICAL 0件
+  - pip-audit: 1件(ecdsa, 修正版なし, 影響なし)
+  - SECRET_KEY デフォルト値使用時の警告ログ追加
+  - 595テスト全パス（456 unit + 119 integration + 20 performance）
 ```
 
 ---
@@ -446,11 +513,11 @@ Phase5-4: 受入テスト
 | Phase 2 | 2.9人月 | 2.7人月 | **完了** | 2月全完了（2-6含む） |
 | Phase 3 | 4.3人月 | 3.8人月 | **完了** | 2月完了★4ヶ月前倒し |
 | CI/CD+BG | - | - | **完了** | Phase 4(CI/CD) + Blue-Green |
-| Phase 4 | 4.6人月 | 4.5人月 | 未着手 | RAG + LLM（8月予定） |
-| Phase 5 | 2.9人月 | 2.7人月 | 未着手 | バッチ + KPI + 本番（9月予定） |
+| Phase 4 | 4.6人月 | 4.5人月 | **完了** | 2月完了★6ヶ月前倒し |
+| Phase 5 | 2.9人月 | 2.7人月 | **完了** | バッチ + KPI + 本番 + 受入テスト |
 | **合計** | **20.2人月** | **18.2人月** | | |
 
-**バッファ: 4.0+人月** → Phase 3の4ヶ月前倒しにより大幅拡大。Phase 4 LLMリスクに十分な余裕
+**バッファ: 6.0+人月** → Phase 1〜4の全前倒しにより大幅拡大。Phase 5に十分な余裕
 
 ---
 
@@ -460,7 +527,7 @@ Phase5-4: 受入テスト
 
 - **言語**: JS/TS混在（`allowJs: true`）。新規ファイルのみTSX
 - **UI**: MUI v5 + Fira Sans/Code（MASTER.md準拠）
-- **状態管理**: React Context + localStorage hybrid
+- **状態管理**: React Context + 直接API接続（localStorage依存なし）
 - **グラフ**: Recharts
 - **5タブ構成**: 搬入管理、配合管理、分析ダッシュボード、品質管理、マスタ管理
 
@@ -488,11 +555,13 @@ Phase5-4: 受入テスト
 | 優先度 | 提案 | 対応時期 |
 |--------|------|---------|
 | ~~HIGH~~ | ~~テストカバレッジ80%達成~~ | **完了**（2月達成） |
-| MEDIUM | Blue-Green デプロイを Phase 5 に移動（Phase 2 は検索+インポートに集中） | Phase 2 計画時 |
+| ~~MEDIUM~~ | ~~Blue-Green デプロイを Phase 5 に移動~~ | **完了**（Phase 5で実施） |
 | MEDIUM | ML学習データ量の現実的見積もり（不足時は合成データ計画） | 3月末 |
 | MEDIUM | 受入テスト仕様の早期定義（クライアントと合意） | 4月 |
-| LOW | 共通 useNotification フック作成（Snackbar 重複削減） | Phase 2 UI改善時 |
+| ~~LOW~~ | ~~共通 useNotification フック作成（Snackbar 重複削減）~~ | **完了**（リファクタリング） |
+| ~~LOW~~ | ~~useCrudList ジェネリックフック + マスタ画面統合~~ | **完了**（リファクタリング） |
+| ~~LOW~~ | ~~localStorage脱却 + Tab 0 TSX化~~ | **完了**（搬入管理モダナイゼーション） |
 | LOW | Tab 2/3 の責務再定義（分析 vs 品質管理） | Phase 3 ダッシュボード時 |
 
-*最終更新: 2026-02-11*
+*最終更新: 2026-02-13*
 *作成者: Claude Code + yasu*

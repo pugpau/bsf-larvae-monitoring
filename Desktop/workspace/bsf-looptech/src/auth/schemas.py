@@ -62,26 +62,30 @@ class UserUpdate(BaseModel):
     preferences: Optional[Dict[str, Any]] = None
 
 
-class UserResponse(UserBase):
-    """Schema for user response."""
+class UserProfileResponse(UserBase):
+    """Schema for user profile response (self-service endpoints)."""
     id: UUID
     role: UserRole
     is_active: bool
     is_verified: bool
-    is_superuser: bool
     created_at: datetime
     updated_at: Optional[datetime]
     last_login: Optional[datetime]
     force_password_change: bool
-    failed_login_attempts: int
-    locked_until: Optional[datetime]
     preferences: Optional[Dict[str, Any]]
-    
+
     class Config:
         from_attributes = True
         json_encoders = {
             UUID: str
         }
+
+
+class UserResponse(UserProfileResponse):
+    """Schema for user response (admin endpoints — includes security fields)."""
+    is_superuser: bool
+    failed_login_attempts: int
+    locked_until: Optional[datetime]
 
 
 class UserListResponse(BaseModel):
@@ -100,9 +104,17 @@ class PasswordChange(BaseModel):
     
     @validator('new_password')
     def validate_new_password(cls, v):
-        """Validate new password strength."""
+        """Validate new password strength (same rules as UserCreate)."""
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
+            raise ValueError('Password must contain at least one special character')
         return v
 
 
@@ -115,6 +127,21 @@ class PasswordResetConfirm(BaseModel):
     """Schema for password reset confirmation."""
     token: str = Field(..., description="Reset token")
     new_password: str = Field(..., min_length=8, max_length=100, description="New password")
+
+    @validator('new_password')
+    def validate_new_password(cls, v):
+        """Validate new password strength (same rules as UserCreate)."""
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
+            raise ValueError('Password must contain at least one special character')
+        return v
 
 
 class LoginRequest(BaseModel):
@@ -130,7 +157,7 @@ class LoginResponse(BaseModel):
     refresh_token: str = Field(..., description="JWT refresh token")
     token_type: str = Field("bearer", description="Token type")
     expires_in: int = Field(..., description="Token expiration in seconds")
-    user: UserResponse = Field(..., description="User information")
+    user: UserProfileResponse = Field(..., description="User information")
 
 
 class RefreshTokenRequest(BaseModel):

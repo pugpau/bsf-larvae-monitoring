@@ -10,10 +10,7 @@ import {
   TableHead, TableRow, Paper, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import { optimizeFormulation } from '../../utils/apiClient';
-
-const WASTE_TYPES = [
-  '汚泥（一般）', '焼却灰', '汚泥（有機）', '鉱さい', 'ばいじん', 'その他',
-];
+import { WASTE_TYPES } from '../../constants/waste';
 
 interface CostItem {
   material_name: string;

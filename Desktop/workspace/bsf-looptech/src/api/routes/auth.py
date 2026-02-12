@@ -3,9 +3,11 @@ Authentication API routes.
 Handles user authentication, registration, and account management.
 """
 
+import os
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, status, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,7 +16,7 @@ from src.auth.service import AuthenticationService, UserManagementService, APIKe
 from src.auth.security import get_current_user, get_current_active_user, require_permission, require_role
 from src.auth.models import User, UserRole, Permission
 from src.auth.schemas import (
-    UserCreate, UserUpdate, UserResponse, UserListResponse,
+    UserCreate, UserUpdate, UserProfileResponse, UserResponse, UserListResponse,
     LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse,
     PasswordChange, APIKeyCreate, APIKeyResponse, APIKeyCreateResponse,
     SessionResponse, SecurityStatusResponse, FarmAccessRequest, FarmAccessResponse
@@ -29,6 +31,10 @@ security = HTTPBearer()
 
 # Authentication endpoints
 
+_IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
+_REFRESH_TOKEN_MAX_AGE = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7")) * 86400
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     login_request: LoginRequest,
@@ -37,35 +43,52 @@ async def login(
 ):
     """
     Authenticate user and return JWT tokens.
+    Refresh token is set as httpOnly cookie for XSS protection.
     """
     try:
         # Use the AuthenticationService
         auth_service = AuthenticationService(session)
-        
+
         # Get client information
         ip_address = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("User-Agent")
-        
+
         # Authenticate user
         token_data, error = await auth_service.authenticate_user(
             login_request, ip_address, user_agent
         )
-        
+
         if error:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=error
             )
-        
-        # Create response following the schema
-        return LoginResponse(
+
+        # Build JSON response (refresh_token excluded from body)
+        login_response = LoginResponse(
             access_token=token_data["access_token"],
-            refresh_token=token_data["refresh_token"],
+            refresh_token="httponly",
             token_type=token_data["token_type"],
             expires_in=token_data["expires_in"],
-            user=UserResponse(**token_data["user"])
+            user=UserProfileResponse(**token_data["user"])
         )
-        
+
+        response = JSONResponse(content=login_response.model_dump(mode="json"))
+
+        # Set refresh token as httpOnly cookie
+        max_age = 30 * 86400 if login_request.remember_me else _REFRESH_TOKEN_MAX_AGE
+        response.set_cookie(
+            key="refresh_token",
+            value=token_data["refresh_token"],
+            httponly=True,
+            secure=_IS_PRODUCTION,
+            samesite="lax",
+            path="/auth",
+            max_age=max_age,
+        )
+
+        return response
+
     except HTTPException:
         raise
     except Exception as e:
@@ -78,57 +101,87 @@ async def login(
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_token(
-    refresh_request: RefreshTokenRequest,
+    request: Request,
+    refresh_request: Optional[RefreshTokenRequest] = None,
     session: AsyncSession = Depends(get_async_session)
 ):
     """
-    Refresh access token using refresh token.
+    Refresh access token using refresh token from httpOnly cookie.
+    Falls back to request body for backward compatibility.
     """
+    # Read refresh token: cookie first, then body fallback
+    token = request.cookies.get("refresh_token")
+    if not token and refresh_request:
+        token = refresh_request.refresh_token
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token not found"
+        )
+
     auth_service = AuthenticationService(session)
-    
-    token_data, error = await auth_service.refresh_access_token(refresh_request.refresh_token)
-    
+
+    token_data, error = await auth_service.refresh_access_token(token)
+
     if error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=error
         )
-    
+
     return RefreshTokenResponse(**token_data)
 
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session)
 ):
     """
-    Logout user by revoking sessions.
+    Logout user by revoking sessions and blacklisting the current token.
     """
+    from src.auth.security import blacklist_token, verify_token as _verify
+
+    # Blacklist the current access token so it cannot be reused
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+        payload = _verify(token, "access")
+        if payload and payload.get("jti"):
+            blacklist_token(payload["jti"])
+
     auth_service = AuthenticationService(session)
-    
+
     success = await auth_service.logout_user(str(current_user.id))
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to logout"
         )
-    
-    return {"message": "Successfully logged out"}
+
+    response = JSONResponse(content={"message": "Successfully logged out"})
+    response.delete_cookie(
+        key="refresh_token",
+        path="/auth",
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserProfileResponse)
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
     """
     Get current user information.
     """
-    return UserResponse.model_validate(current_user)
+    return UserProfileResponse.model_validate(current_user)
 
 
-@router.put("/me", response_model=UserResponse)
+@router.put("/me", response_model=UserProfileResponse)
 async def update_current_user(
     user_update: UserUpdate,
     current_user: User = Depends(get_current_active_user),
@@ -138,25 +191,25 @@ async def update_current_user(
     Update current user information.
     """
     user_service = UserManagementService(session)
-    
+
     # Remove role update for self-update (only admins can change roles)
     update_data = user_update.dict(exclude_unset=True)
     if "role" in update_data:
         del update_data["role"]
-    
+
     updated_user = await user_service.update_user(
-        str(current_user.id), 
+        str(current_user.id),
         UserUpdate(**update_data),
         str(current_user.id)
     )
-    
+
     if not updated_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
-    return UserResponse.model_validate(updated_user)
+
+    return UserProfileResponse.model_validate(updated_user)
 
 
 @router.post("/change-password")
@@ -397,18 +450,27 @@ async def revoke_api_key(
     session: AsyncSession = Depends(get_async_session)
 ):
     """
-    Revoke API key.
+    Revoke API key. Users can only revoke their own keys (admins can revoke any).
     """
     api_key_service = APIKeyService(session)
-    
+
+    # Ownership check: verify the key belongs to the current user (unless admin)
+    user_keys = await api_key_service.get_user_api_keys(str(current_user.id))
+    is_owner = any(str(k.id) == key_id for k in user_keys)
+    if not is_owner and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only revoke your own API keys"
+        )
+
     success = await api_key_service.revoke_api_key(key_id)
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="API key not found"
         )
-    
+
     return {"message": "API key revoked successfully"}
 
 

@@ -64,8 +64,9 @@ class TestWasteRepositoryCreate:
 class TestWasteRepositoryRead:
     async def test_get_all_empty(self, async_session):
         repo = WasteRepository(async_session)
-        result = await repo.get_all()
-        assert result == []
+        items, total = await repo.get_all()
+        assert items == []
+        assert total == 0
 
     async def test_get_all_with_records(self, async_session):
         repo = WasteRepository(async_session)
@@ -75,8 +76,9 @@ class TestWasteRepositoryRead:
                 "deliveryDate": f"2026-01-{10 + i:02d}",
                 "wasteType": "汚泥",
             })
-        result = await repo.get_all()
-        assert len(result) == 3
+        items, total = await repo.get_all()
+        assert len(items) == 3
+        assert total == 3
 
     async def test_get_all_with_status_filter(self, async_session):
         repo = WasteRepository(async_session)
@@ -88,9 +90,10 @@ class TestWasteRepositoryRead:
             "source": "B", "deliveryDate": "2026-01-11",
             "wasteType": "汚泥", "status": "analyzed",
         })
-        result = await repo.get_all(status="pending")
-        assert len(result) == 1
-        assert result[0]["source"] == "A"
+        items, total = await repo.get_all(status="pending")
+        assert len(items) == 1
+        assert total == 1
+        assert items[0]["source"] == "A"
 
     async def test_get_all_with_waste_type_filter(self, async_session):
         repo = WasteRepository(async_session)
@@ -100,9 +103,10 @@ class TestWasteRepositoryRead:
         await repo.create({
             "source": "B", "deliveryDate": "2026-01-11", "wasteType": "焼却灰",
         })
-        result = await repo.get_all(waste_type="焼却灰")
-        assert len(result) == 1
-        assert result[0]["wasteType"] == "焼却灰"
+        items, total = await repo.get_all(waste_type="焼却灰")
+        assert len(items) == 1
+        assert total == 1
+        assert items[0]["wasteType"] == "焼却灰"
 
     async def test_get_all_with_source_filter(self, async_session):
         repo = WasteRepository(async_session)
@@ -112,8 +116,9 @@ class TestWasteRepositoryRead:
         await repo.create({
             "source": "工場Y", "deliveryDate": "2026-01-11", "wasteType": "汚泥",
         })
-        result = await repo.get_all(source="工場X")
-        assert len(result) == 1
+        items, total = await repo.get_all(source="工場X")
+        assert len(items) == 1
+        assert total == 1
 
     async def test_get_all_with_limit(self, async_session):
         repo = WasteRepository(async_session)
@@ -122,8 +127,9 @@ class TestWasteRepositoryRead:
                 "source": f"s{i}", "deliveryDate": f"2026-01-{10 + i:02d}",
                 "wasteType": "汚泥",
             })
-        result = await repo.get_all(limit=2)
-        assert len(result) == 2
+        items, total = await repo.get_all(limit=2)
+        assert len(items) == 2
+        assert total == 5
 
     async def test_get_by_id(self, async_session):
         repo = WasteRepository(async_session)
@@ -139,6 +145,99 @@ class TestWasteRepositoryRead:
         result = await repo.get_by_id("nonexistent-id")
         # SQLite may raise an error for non-UUID strings, which returns None
         assert result is None
+
+
+@pytest.mark.unit
+class TestWasteRepositorySearch:
+    async def test_text_search_by_source(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "東京工場", "deliveryDate": "2026-01-10", "wasteType": "汚泥"})
+        await repo.create({"source": "大阪工場", "deliveryDate": "2026-01-11", "wasteType": "焼却灰"})
+        items, total = await repo.get_all(q="東京")
+        assert len(items) == 1
+        assert total == 1
+        assert items[0]["source"] == "東京工場"
+
+    async def test_text_search_by_waste_type(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "A", "deliveryDate": "2026-01-10", "wasteType": "汚泥（一般）"})
+        await repo.create({"source": "B", "deliveryDate": "2026-01-11", "wasteType": "焼却灰"})
+        items, total = await repo.get_all(q="焼却")
+        assert len(items) == 1
+        assert total == 1
+        assert items[0]["wasteType"] == "焼却灰"
+
+    async def test_text_search_by_notes(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "A", "deliveryDate": "2026-01-10", "wasteType": "汚泥", "notes": "緊急搬入"})
+        await repo.create({"source": "B", "deliveryDate": "2026-01-11", "wasteType": "汚泥", "notes": "通常搬入"})
+        items, total = await repo.get_all(q="緊急")
+        assert len(items) == 1
+        assert total == 1
+
+    async def test_text_search_no_match(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "A", "deliveryDate": "2026-01-10", "wasteType": "汚泥"})
+        items, total = await repo.get_all(q="存在しない")
+        assert len(items) == 0
+        assert total == 0
+
+    async def test_sort_by_source_asc(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "C工場", "deliveryDate": "2026-01-10", "wasteType": "汚泥"})
+        await repo.create({"source": "A工場", "deliveryDate": "2026-01-11", "wasteType": "汚泥"})
+        await repo.create({"source": "B工場", "deliveryDate": "2026-01-12", "wasteType": "汚泥"})
+        items, _ = await repo.get_all(sort_by="source", sort_order="asc")
+        assert items[0]["source"] == "A工場"
+        assert items[1]["source"] == "B工場"
+        assert items[2]["source"] == "C工場"
+
+    async def test_sort_by_invalid_column_defaults_to_delivery_date(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "A", "deliveryDate": "2026-01-10", "wasteType": "汚泥"})
+        await repo.create({"source": "B", "deliveryDate": "2026-01-20", "wasteType": "汚泥"})
+        items, _ = await repo.get_all(sort_by="DROP TABLE", sort_order="desc")
+        assert len(items) == 2
+        assert items[0]["deliveryDate"] == "2026-01-20"
+
+    async def test_offset_pagination(self, async_session):
+        repo = WasteRepository(async_session)
+        for i in range(5):
+            await repo.create({
+                "source": f"s{i}", "deliveryDate": f"2026-01-{10 + i:02d}",
+                "wasteType": "汚泥",
+            })
+        items, total = await repo.get_all(limit=2, offset=2)
+        assert len(items) == 2
+        assert total == 5
+
+    async def test_combined_filter_and_search(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "東京A", "deliveryDate": "2026-01-10", "wasteType": "汚泥", "status": "pending"})
+        await repo.create({"source": "東京B", "deliveryDate": "2026-01-11", "wasteType": "汚泥", "status": "analyzed"})
+        await repo.create({"source": "大阪C", "deliveryDate": "2026-01-12", "wasteType": "汚泥", "status": "pending"})
+        items, total = await repo.get_all(q="東京", status="pending")
+        assert len(items) == 1
+        assert total == 1
+        assert items[0]["source"] == "東京A"
+
+    async def test_get_all_for_export(self, async_session):
+        repo = WasteRepository(async_session)
+        for i in range(3):
+            await repo.create({
+                "source": f"s{i}", "deliveryDate": f"2026-01-{10 + i:02d}",
+                "wasteType": "汚泥",
+            })
+        items = await repo.get_all_for_export()
+        assert len(items) == 3
+
+    async def test_get_all_for_export_with_filter(self, async_session):
+        repo = WasteRepository(async_session)
+        await repo.create({"source": "A", "deliveryDate": "2026-01-10", "wasteType": "汚泥", "status": "pending"})
+        await repo.create({"source": "B", "deliveryDate": "2026-01-11", "wasteType": "焼却灰", "status": "analyzed"})
+        items = await repo.get_all_for_export(waste_type="焼却灰")
+        assert len(items) == 1
+        assert items[0]["wasteType"] == "焼却灰"
 
 
 @pytest.mark.unit
@@ -349,8 +448,9 @@ class TestWasteService:
         await svc.create_record({
             "source": "A", "deliveryDate": "2026-01-10", "wasteType": "汚泥",
         })
-        result = await svc.get_all_records()
-        assert len(result) == 1
+        items, total = await svc.get_all_records()
+        assert len(items) == 1
+        assert total == 1
 
     async def test_get_record(self, async_session):
         repo = WasteRepository(async_session)

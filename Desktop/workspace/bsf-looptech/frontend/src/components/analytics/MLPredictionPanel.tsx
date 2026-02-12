@@ -10,10 +10,7 @@ import {
   Select, MenuItem
 } from '@mui/material';
 import { predictFormulation, predictElution } from '../../utils/apiClient';
-
-const WASTE_TYPES = [
-  '汚泥（一般）', '焼却灰', '汚泥（有機）', '鉱さい', 'ばいじん', 'その他',
-];
+import { WASTE_TYPES } from '../../constants/waste';
 
 const METAL_FIELDS = [
   { key: 'Pb', label: '鉛 (Pb)' },

@@ -91,9 +91,20 @@ async def create_admin_user():
 
 
 async def create_default_users():
-    """Create default test users for development."""
-    print("\n=== Creating Default Test Users ===\n")
-    
+    """Create default test users for development.
+
+    WARNING: Uses hardcoded passwords for development convenience only.
+    Never run in production — use create_admin_user() for real deployments.
+    """
+    # Safety guard: refuse to run unless --dev-only flag is present
+    if "--dev-only" not in sys.argv:
+        print("ERROR: create_default_users requires --dev-only flag.")
+        print("Usage: python scripts/create_admin_user.py --default --dev-only")
+        print("This command is for development environments only.")
+        return False
+
+    print("\n=== Creating Default Test Users (DEVELOPMENT ONLY) ===\n")
+
     default_users = [
         {
             "username": "admin",
@@ -159,8 +170,8 @@ async def create_default_users():
 
 def main():
     """Main entry point."""
-    if len(sys.argv) > 1 and sys.argv[1] == "--default":
-        # Create default users for development
+    if "--default" in sys.argv:
+        # Create default users for development (requires --dev-only flag)
         asyncio.run(create_default_users())
     else:
         # Interactive admin user creation

@@ -3,7 +3,7 @@ Service layer for waste treatment records and material types.
 Encapsulates business logic between API routes and repository.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import logging
 
 from src.waste.repository import WasteRepository, MaterialTypeRepository
@@ -41,16 +41,31 @@ class WasteService:
 
     async def get_all_records(
         self,
+        q: Optional[str] = None,
         status: Optional[str] = None,
         waste_type: Optional[str] = None,
         source: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: str = "desc",
         limit: int = 200,
         offset: int = 0,
-    ) -> List[Dict[str, Any]]:
-        """Get all waste records with optional filters."""
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Get waste records with search, filters, pagination. Returns (items, total)."""
         return await self.repository.get_all(
-            status=status, waste_type=waste_type, source=source,
+            q=q, status=status, waste_type=waste_type, source=source,
+            sort_by=sort_by, sort_order=sort_order,
             limit=limit, offset=offset,
+        )
+
+    async def get_all_for_export(
+        self,
+        status: Optional[str] = None,
+        waste_type: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get all records without pagination (for CSV export)."""
+        return await self.repository.get_all_for_export(
+            status=status, waste_type=waste_type, source=source,
         )
 
     async def get_record(self, record_id: str) -> Optional[Dict[str, Any]]:

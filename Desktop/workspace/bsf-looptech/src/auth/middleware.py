@@ -15,6 +15,7 @@ from src.auth.security import verify_token, SecurityHeaders, SKIP_AUTH
 from src.auth.repository import UserRepository, SessionRepository, APIKeyRepository
 from src.auth.models import User, Permission
 from src.utils.logging import get_logger
+from src.utils.request import get_client_ip
 
 logger = get_logger(__name__)
 
@@ -215,7 +216,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 }
             
             # Check IP restrictions
-            client_ip = self._get_client_ip(request)
+            client_ip = get_client_ip(request)
             if api_key_obj.allowed_ips and client_ip not in api_key_obj.allowed_ips:
                 logger.warning(f"API key access denied from IP {client_ip}")
                 return {
@@ -245,23 +246,6 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 "message": "Authentication failed"
             }
     
-    def _get_client_ip(self, request: Request) -> str:
-        """Get client IP address from request."""
-        # Check for forwarded headers (from load balancers, proxies)
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-        
-        # Fallback to direct connection
-        if hasattr(request.client, "host"):
-            return request.client.host
-        
-        return "unknown"
-    
     async def _log_request(
         self, 
         request: Request, 
@@ -281,7 +265,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 "processing_time": processing_time,
                 "user_id": str(user_id.id) if user_id else None,
                 "api_key_id": str(api_key.id) if api_key else None,
-                "ip_address": self._get_client_ip(request),
+                "ip_address": get_client_ip(request),
                 "user_agent": request.headers.get("User-Agent")
             }
             
@@ -336,24 +320,44 @@ class PermissionMiddleware:
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Basic rate limiting middleware.
-    In production, this should use Redis for distributed rate limiting.
+    Basic in-memory rate limiting middleware.
+
+    KNOWN LIMITATIONS (closed-network deployment accepted):
+    - In-memory dict: state is lost on restart and not shared across workers.
+    - Single-process only: Blue-Green slots each maintain independent counters.
+    - No persistence: a restart resets all rate limit windows.
+    For distributed or multi-worker deployments, replace with Redis-backed
+    rate limiting (e.g. fastapi-limiter + Redis).
     """
-    
+
+    _CLEANUP_INTERVAL = 100  # Run cleanup every N requests
+
     def __init__(self, app, requests_per_minute: int = 60):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
-        self.request_counts = {}  # In production, use Redis
+        self.request_counts: dict[str, dict[int, int]] = {}
+        self._request_counter = 0
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Apply rate limiting to requests."""
-        client_ip = self._get_client_ip(request)
+        client_ip = get_client_ip(request)
         current_time = int(time.time() / 60)  # Current minute
-        
+
+        # Periodic cleanup of stale IP entries to prevent memory growth
+        self._request_counter += 1
+        if self._request_counter >= self._CLEANUP_INTERVAL:
+            self._request_counter = 0
+            stale_ips = [
+                ip for ip, minutes in self.request_counts.items()
+                if all(m < current_time - 1 for m in minutes)
+            ]
+            for ip in stale_ips:
+                del self.request_counts[ip]
+
         # Initialize or clean up old entries
         if client_ip not in self.request_counts:
             self.request_counts[client_ip] = {}
-        
+
         # Remove old minute entries
         self.request_counts[client_ip] = {
             minute: count for minute, count in self.request_counts[client_ip].items()
@@ -386,72 +390,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Reset"] = str((current_time + 1) * 60)
         
         return response
-    
-    def _get_client_ip(self, request: Request) -> str:
-        """Get client IP address from request."""
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        
-        if hasattr(request.client, "host"):
-            return request.client.host
-        
-        return "unknown"
-
-
-class CORSSecurityMiddleware(BaseHTTPMiddleware):
-    """
-    Enhanced CORS middleware with security considerations.
-    """
-    
-    def __init__(
-        self, 
-        app,
-        allowed_origins: list = None,
-        allowed_methods: list = None,
-        allowed_headers: list = None,
-        expose_headers: list = None,
-        allow_credentials: bool = True,
-        max_age: int = 600
-    ):
-        super().__init__(app)
-        self.allowed_origins = allowed_origins or ["http://localhost:3000"]
-        self.allowed_methods = allowed_methods or ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-        self.allowed_headers = allowed_headers or [
-            "Authorization",
-            "Content-Type",
-            "X-Requested-With",
-            "Accept",
-            "Origin"
-        ]
-        self.expose_headers = expose_headers or ["X-Total-Count"]
-        self.allow_credentials = allow_credentials
-        self.max_age = max_age
-    
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """Handle CORS with security considerations."""
-        origin = request.headers.get("Origin")
-        
-        # Handle preflight requests
-        if request.method == "OPTIONS":
-            response = Response()
-        else:
-            response = await call_next(request)
-        
-        # Add CORS headers
-        if origin and self._is_allowed_origin(origin):
-            response.headers["Access-Control-Allow-Origin"] = origin
-        
-        if self.allow_credentials:
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-        
-        response.headers["Access-Control-Allow-Methods"] = ", ".join(self.allowed_methods)
-        response.headers["Access-Control-Allow-Headers"] = ", ".join(self.allowed_headers)
-        response.headers["Access-Control-Expose-Headers"] = ", ".join(self.expose_headers)
-        response.headers["Access-Control-Max-Age"] = str(self.max_age)
-        
-        return response
-    
-    def _is_allowed_origin(self, origin: str) -> bool:
-        """Check if origin is allowed."""
-        return origin in self.allowed_origins or "*" in self.allowed_origins

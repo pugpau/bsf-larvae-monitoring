@@ -29,31 +29,17 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       const token = localStorage.getItem('accessToken');
       if (token) {
-        // Development mode: Check for demo token
-        if (process.env.NODE_ENV === 'development' && token === 'demo-token') {
-          // Use mock user data for development
-          const mockUser = {
-            id: '1',
-            username: 'demo',
-            role: 'admin',
-            permissions: ['read', 'write', 'admin']
-          };
-          setUser(mockUser);
-        } else {
-          try {
-            // Set auth header
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            
-            // Get current user
-            const response = await axios.get('/auth/me');
-            setUser(response.data);
-          } catch (err) {
-            console.error('Auth check failed:', err);
-            // Clear invalid token
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            delete axios.defaults.headers.common['Authorization'];
-          }
+        try {
+          // Set auth header
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+          // Get current user
+          const response = await axios.get('/auth/me');
+          setUser(response.data);
+        } catch (err) {
+          // Clear invalid token
+          localStorage.removeItem('accessToken');
+          delete axios.defaults.headers.common['Authorization'];
         }
       }
       setLoading(false);
@@ -66,42 +52,16 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setError(null);
-      
-      // Development mode: Allow demo login
-      if (process.env.NODE_ENV === 'development' && 
-          username === 'demo' && password === 'demo') {
-        
-        // Mock user data for development
-        const mockUser = {
-          id: '1',
-          username: 'demo',
-          role: 'admin',
-          permissions: ['read', 'write', 'admin']
-        };
-        
-        // Store mock tokens
-        localStorage.setItem('accessToken', 'demo-token');
-        localStorage.setItem('refreshToken', 'demo-refresh-token');
-        
-        setUser(mockUser);
-        return { success: true };
-      }
-      
-      // Create form data for OAuth2 compatibility
-      const formData = new URLSearchParams();
-      formData.append('username', username);
-      formData.append('password', password);
 
       const response = await axios.post('/auth/login', {
         username,
         password
       });
 
-      const { access_token, refresh_token, token_type, user } = response.data;
+      const { access_token, token_type, user } = response.data;
 
-      // Store tokens
+      // Store access token (refresh token is in httpOnly cookie)
       localStorage.setItem('accessToken', access_token);
-      localStorage.setItem('refreshToken', refresh_token);
 
       // Set auth header
       axios.defaults.headers.common['Authorization'] = `${token_type} ${access_token}`;
@@ -125,24 +85,16 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', err);
     }
 
-    // Clear local state and storage
+    // Clear local state and storage (refresh token cookie cleared by backend)
     setUser(null);
     localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
     delete axios.defaults.headers.common['Authorization'];
   };
 
-  // Refresh token function
+  // Refresh token function (refresh token sent via httpOnly cookie)
   const refreshAccessToken = async () => {
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        throw new Error('No refresh token');
-      }
-
-      const response = await axios.post('/auth/refresh', {
-        refresh_token: refreshToken
-      });
+      const response = await axios.post('/auth/refresh');
 
       const { access_token } = response.data;
 
@@ -152,7 +104,6 @@ export const AuthProvider = ({ children }) => {
 
       return access_token;
     } catch (err) {
-      console.error('Token refresh failed:', err);
       logout();
       throw err;
     }
@@ -196,7 +147,7 @@ export const AuthProvider = ({ children }) => {
       axios.interceptors.request.eject(requestInterceptor);
       axios.interceptors.response.eject(responseInterceptor);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- interceptors registered once on mount
 
   // Check if user has permission
   const hasPermission = (permission) => {

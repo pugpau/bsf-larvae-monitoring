@@ -17,8 +17,8 @@ import theme from './theme/materialTheme';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginForm from './components/auth/LoginForm';
 import PrivateRoute from './components/auth/PrivateRoute';
-import SubstrateBatchForm from './components/substrate/SubstrateBatchForm.js';
-import SubstrateBatchList from './components/substrate/SubstrateBatchList.js';
+import SubstrateBatchForm from './components/substrate/SubstrateBatchForm.tsx';
+import SubstrateBatchList from './components/substrate/SubstrateBatchList.tsx';
 import AnalyticsDashboard from './components/analytics/AnalyticsDashboard.js';
 import CorrelationAnalysis from './components/analytics/CorrelationAnalysis.js';
 import MasterManagement from './components/master/MasterManagement.tsx';
@@ -27,16 +27,10 @@ import MLPredictionPanel from './components/analytics/MLPredictionPanel.tsx';
 import OptimizationPanel from './components/analytics/OptimizationPanel.tsx';
 import TrendAnalysis from './components/analytics/TrendAnalysis.tsx';
 import PredictionAccuracy from './components/analytics/PredictionAccuracy.tsx';
-import { initializeFromApi } from './utils/storage';
-
-
+import KPIDashboard from './components/analytics/KPIDashboard.tsx';
+import ChatFab from './components/chat/ChatFab.tsx';
 const Dashboard = () => {
   const [selectedTab, setSelectedTab] = useState(0);
-
-  // Try to sync data from backend API on mount
-  useEffect(() => {
-    initializeFromApi();
-  }, []);
   const [editingSubstrateBatch, setEditingSubstrateBatch] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
 
@@ -147,9 +141,10 @@ const Dashboard = () => {
         </Box>
       )}
 
-      {/* Tab 2: 分析ダッシュボード — 相関グラフ、統計、トレンド、精度 */}
+      {/* Tab 2: 分析ダッシュボード — KPI、相関グラフ、統計、トレンド、精度 */}
       {selectedTab === 2 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <KPIDashboard />
           <CorrelationAnalysis />
           <TrendAnalysis />
           <PredictionAccuracy />
@@ -169,6 +164,9 @@ const Dashboard = () => {
           <MasterManagement />
         </Box>
       )}
+
+      {/* Floating AI Chat Button */}
+      <ChatFab />
     </Container>
   );
 };

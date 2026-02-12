@@ -4,7 +4,6 @@
  * Phase 2: Paginated responses, CSV export/import.
  */
 
-import axios from 'axios';
 import type {
   Supplier,
   SolidificationMaterial,
@@ -14,12 +13,11 @@ import type {
   ListParams,
   ImportResult,
 } from '../types/api';
+import { createAuthenticatedClient } from '../utils/axiosConfig';
 
-const api = axios.create({
-  baseURL: process.env.REACT_APP_API_V1_URL || '/api/v1',
-  timeout: 10000,
-  headers: { 'Content-Type': 'application/json' },
-});
+const api = createAuthenticatedClient(
+  process.env.REACT_APP_API_V1_URL || '/api/v1',
+);
 
 
 // ── Suppliers ──

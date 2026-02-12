@@ -128,3 +128,59 @@ export interface RecipeDetail {
   order_index: number;
   notes?: string;
 }
+
+/** Waste Record (搬入記録) */
+export interface WasteRecord {
+  id: string;
+  source: string;
+  deliveryDate: string;
+  wasteType: string;
+  weight?: number;
+  weightUnit: string;
+  status: 'pending' | 'analyzed' | 'formulated';
+  analysis?: Record<string, number | null>;
+  formulation?: Record<string, unknown> | null;
+  elutionResult?: Record<string, unknown> | null;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Chat Session (チャットセッション) */
+export interface ChatSession {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Context chunk reference from knowledge base */
+export interface ContextChunk {
+  title: string;
+  content: string;
+  score: number;
+}
+
+/** Chat Message (チャットメッセージ) */
+export interface ChatMessage {
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  context_chunks?: ContextChunk[];
+  token_count?: number;
+  created_at: string;
+}
+
+/** Chat Session with messages (セッション詳細) */
+export interface ChatSessionDetail extends ChatSession {
+  messages: ChatMessage[];
+}
+
+/** Chat API response (RAG回答) */
+export interface ChatResponse {
+  session_id: string;
+  answer: string;
+  context: ContextChunk[];
+  token_count?: number;
+}

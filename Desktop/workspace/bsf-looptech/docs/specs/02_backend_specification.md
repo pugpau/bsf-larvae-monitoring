@@ -66,7 +66,7 @@ src/
 | **マイグレーション** | Alembic | latest |
 | **時系列DB** | InfluxDB Client | latest |
 | **MQTT** | paho-mqtt | latest |
-| **認証** | python-jose, passlib | latest |
+| **認証** | PyJWT, passlib | latest |
 | **データ処理** | pandas, numpy, scipy | latest |
 | **機械学習** | scikit-learn | latest |
 

@@ -39,6 +39,8 @@ logs/
 certs/*.pem
 certs/*.key
 certs/*.crt
+config/ssl/*.crt
+config/ssl/*.key
 
 # Temporary
 temp/
@@ -59,13 +61,18 @@ bsf_system.db
 # Playwright MCP (local)
 .playwright-mcp/
 
+# Playwright E2E artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
 # IoT / M5Stick / MQTT (removed from project)
 m5stick_*/
 atoms3_*/
 certs/
 config/mosquitto*.conf
 config/mqtt_acl.conf
-config/com.bsf-looptech.production.plist
+# config/com.bsf-looptech.production.plist (tracked)
 mqtt_test.py
 quick_mqtt_test.py
 test_mqtt_tls.py
