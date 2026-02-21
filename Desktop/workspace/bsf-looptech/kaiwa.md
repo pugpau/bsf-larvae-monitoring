@@ -1,5 +1,36 @@
 # BSF-LoopTech プロジェクト会話履歴
 
+## 2026-02-21 - フロントエンド共通化 + APIクライアント分割完了
+
+### 実施内容
+
+**フロントエンドリファクタリング 7タスク (orchestrate refactor)**
+
+1. **型定義重複解消** — WasteRecord正規型統一
+2. **統計関数抽出** — CorrelationAnalysis → `utils/statistics.ts` (calculateCorrelation, calculateR2)
+3. **RecipeList共通化** — useNotification + ConfirmDeleteDialog 採用
+4. **マスタ4画面共通化** — ConfirmDeleteDialog + NotificationSnackbar 統一
+5. **APIクライアント分割** — `apiClient.ts` (341行) → `mlApi.ts` / `chatApi.ts` / `kpiApi.ts` + 元ファイル削除
+6. **DeliveryScheduleList** — ConfirmDeleteDialog + DATA_CELL_SX 適用
+7. **最終検証** — コードレビュー指摘2件修正（コピペ変数名 + 未使用import）
+
+**ドキュメント更新**
+- keikaku.md: 最新フェーズ反映（配合ワークフロー〜フロントエンド共通化、テスト820件、DB 20テーブル）
+- .gitignore: pytest-of-*/ 追加
+
+### 決定事項・結果
+- **23ファイル変更**: +395行, -565行（差引 -170行）
+- **apiClient.ts完全削除**: ドメイン別API分割で保守性向上
+- **820テスト全パス**: TypeScriptエラーなし、ビルド成功
+- **コードレビュー合格**: copy-paste残骸修正済み
+
+### 今後のアクション
+- ML学習データ量の見積もり（3月末期限）
+- 受入テスト仕様定義（4月期限）
+- 本番デプロイ実施（Mac mini、5月〜）
+
+---
+
 ## 2026-02-13 - 搬入管理モダナイゼーション完了（localStorage脱却 + TSX化）
 
 ### 実施内容

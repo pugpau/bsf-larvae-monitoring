@@ -1,10 +1,12 @@
 """Pydantic schemas for Phase 1/2 material/supplier/recipe endpoints."""
 
 from datetime import datetime
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, Literal, Optional, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+RecipeStatus = Literal["draft", "active", "archived"]
 
 
 # ── Pagination ──
@@ -187,6 +189,19 @@ class RecipeDetailResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RecipeVersionDetailResponse(BaseModel):
+    """Detail item within a version snapshot (uses version_id, not recipe_id)."""
+    id: UUID
+    version_id: UUID
+    material_id: UUID
+    material_type: str
+    addition_rate: float
+    order_index: int
+    notes: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 # ── Recipe ──
 
 class RecipeCreate(BaseModel):
@@ -195,7 +210,7 @@ class RecipeCreate(BaseModel):
     waste_type: str = Field(..., max_length=100)
     target_strength: Optional[float] = None
     target_elution: Optional[dict[str, Any]] = None
-    status: str = Field("draft", max_length=20)
+    status: RecipeStatus = "draft"
     notes: Optional[str] = None
     details: list[RecipeDetailCreate] = Field(default_factory=list)
 
@@ -206,8 +221,9 @@ class RecipeUpdate(BaseModel):
     waste_type: Optional[str] = Field(None, max_length=100)
     target_strength: Optional[float] = None
     target_elution: Optional[dict[str, Any]] = None
-    status: Optional[str] = Field(None, max_length=20)
+    status: Optional[RecipeStatus] = None
     notes: Optional[str] = None
+    change_summary: Optional[str] = Field(None, max_length=500)
 
 
 class RecipeResponse(BaseModel):
@@ -217,10 +233,62 @@ class RecipeResponse(BaseModel):
     waste_type: str
     target_strength: Optional[float] = None
     target_elution: Optional[dict[str, Any]] = None
-    status: str
+    status: RecipeStatus
     notes: Optional[str] = None
+    current_version: int = 1
     details: list[RecipeDetailResponse] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+# ── Recipe Version ──
+
+class RecipeVersionListItem(BaseModel):
+    """Lightweight version item for history list."""
+    id: UUID
+    version: int
+    change_summary: Optional[str] = None
+    created_by: Optional[UUID] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class RecipeVersionResponse(BaseModel):
+    """Full version snapshot with details."""
+    id: UUID
+    recipe_id: UUID
+    version: int
+    name: str
+    supplier_id: Optional[UUID] = None
+    waste_type: str
+    target_strength: Optional[float] = None
+    target_elution: Optional[dict[str, Any]] = None
+    status: RecipeStatus
+    notes: Optional[str] = None
+    change_summary: Optional[str] = None
+    created_by: Optional[UUID] = None
+    details: list[RecipeVersionDetailResponse] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class RecipeDiffField(BaseModel):
+    """Single field difference between two versions."""
+    field: str
+    old_value: Any = None
+    new_value: Any = None
+
+
+class RecipeDiffResponse(BaseModel):
+    """Diff between two recipe versions."""
+    recipe_id: UUID
+    version_from: int
+    version_to: int
+    header_changes: list[RecipeDiffField] = Field(default_factory=list)
+    details_added: list[RecipeVersionDetailResponse] = Field(default_factory=list)
+    details_removed: list[RecipeVersionDetailResponse] = Field(default_factory=list)
+    details_modified: list[dict[str, Any]] = Field(default_factory=list)

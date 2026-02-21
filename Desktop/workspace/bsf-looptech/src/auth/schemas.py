@@ -146,8 +146,8 @@ class PasswordResetConfirm(BaseModel):
 
 class LoginRequest(BaseModel):
     """Schema for login request."""
-    username: str = Field(..., description="Username or email")
-    password: str = Field(..., description="Password")
+    username: str = Field(..., max_length=200, description="Username or email")
+    password: str = Field(..., max_length=200, description="Password")
     remember_me: bool = Field(False, description="Remember login")
 
 

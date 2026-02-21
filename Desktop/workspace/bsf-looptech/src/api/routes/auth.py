@@ -4,7 +4,7 @@ Handles user authentication, registration, and account management.
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Cookie, Depends, HTTPException, status, Request, Response
 from fastapi.responses import JSONResponse
@@ -45,12 +45,34 @@ async def login(
     Authenticate user and return JWT tokens.
     Refresh token is set as httpOnly cookie for XSS protection.
     """
+    # Development mode: bypass DB-based authentication
+    if os.getenv("SKIP_AUTH", "false").lower() == "true":
+        from src.auth.security import _create_dev_user, create_access_token, create_refresh_token
+        from datetime import timedelta
+        dev_user = _create_dev_user()
+        access_token = create_access_token(
+            {"sub": str(dev_user.id), "username": dev_user.username, "role": dev_user.role, "permissions": []},
+            timedelta(hours=24),
+        )
+        refresh_token_val = create_refresh_token({"sub": str(dev_user.id)}, timedelta(days=7))
+        login_response = LoginResponse(
+            access_token=access_token,
+            refresh_token="httponly",
+            token_type="bearer",
+            expires_in=86400,
+            user=UserProfileResponse.model_validate(dev_user),
+        )
+        resp = JSONResponse(content=login_response.model_dump(mode="json"))
+        resp.set_cookie(key="refresh_token", value=refresh_token_val, httponly=True, samesite="lax", path="/auth", max_age=7 * 86400)
+        return resp
+
     try:
         # Use the AuthenticationService
         auth_service = AuthenticationService(session)
 
         # Get client information
-        ip_address = request.client.host if request.client else "unknown"
+        from src.utils.request import get_client_ip
+        ip_address = get_client_ip(request)
         user_agent = request.headers.get("User-Agent")
 
         # Authenticate user
@@ -149,7 +171,7 @@ async def logout(
         token = auth_header.split(" ", 1)[1]
         payload = _verify(token, "access")
         if payload and payload.get("jti"):
-            blacklist_token(payload["jti"])
+            blacklist_token(payload["jti"], float(payload.get("exp", 0)))
 
     auth_service = AuthenticationService(session)
 
@@ -192,10 +214,12 @@ async def update_current_user(
     """
     user_service = UserManagementService(session)
 
-    # Remove role update for self-update (only admins can change roles)
+    # Remove privileged fields for self-update (only admins can change these)
     update_data = user_update.dict(exclude_unset=True)
     if "role" in update_data:
         del update_data["role"]
+    update_data.pop("is_active", None)
+    update_data.pop("preferences", None)
 
     updated_user = await user_service.update_user(
         str(current_user.id),
@@ -504,7 +528,7 @@ async def grant_farm_access(
     return FarmAccessResponse(
         user_id=access_request.user_id,
         farm_id=access_request.farm_id,
-        granted_at=datetime.utcnow(),
+        granted_at=datetime.now(timezone.utc),
         granted_by=str(current_user.id)
     )
 
@@ -610,6 +634,6 @@ async def auth_health():
     return {
         "status": "healthy",
         "service": "authentication",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "1.0.0"
     }

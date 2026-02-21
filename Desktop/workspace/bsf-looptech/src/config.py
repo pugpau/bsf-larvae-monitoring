@@ -48,7 +48,7 @@ class Settings:
         # CORS (comma-separated origins)
         self.CORS_ORIGINS: str = os.getenv(
             "CORS_ORIGINS",
-            "http://localhost:3000,http://localhost:3001",
+            "http://localhost:3000,http://localhost:3003",
         )
 
         # ML model registry

@@ -6,11 +6,16 @@ Phase 2 additions: search, pagination, sorting, CSV export/import.
 import csv
 import io
 import json
+import logging
+import uuid as uuid_module
 from typing import Callable, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Query, Path, Request, UploadFile, File
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from src.database.postgresql import get_async_session
 from src.materials.repository import (
@@ -19,12 +24,14 @@ from src.materials.repository import (
     LeachingSuppressantRepository,
     RecipeRepository,
 )
+from src.config import settings
 from src.materials.schemas import (
     SupplierCreate, SupplierUpdate, SupplierResponse,
     SolidificationMaterialCreate, SolidificationMaterialUpdate, SolidificationMaterialResponse,
     LeachingSuppressantCreate, LeachingSuppressantUpdate, LeachingSuppressantResponse,
-    RecipeCreate, RecipeUpdate, RecipeResponse,
+    RecipeCreate, RecipeUpdate, RecipeResponse, RecipeStatus,
     RecipeDetailCreate,
+    RecipeVersionListItem, RecipeVersionResponse, RecipeVersionDetailResponse, RecipeDiffResponse,
     PaginatedResponse,
     ImportResult,
 )
@@ -47,6 +54,21 @@ async def get_suppressant_repo(session: AsyncSession = Depends(get_async_session
 
 async def get_recipe_repo(session: AsyncSession = Depends(get_async_session)):
     return RecipeRepository(session)
+
+
+def _get_user_id(request: Request) -> Optional[uuid_module.UUID]:
+    """Extract user UUID from auth middleware state (None when SKIP_AUTH)."""
+    user = getattr(request.state, "user", None)
+    if user and hasattr(user, "id"):
+        return user.id
+    if getattr(settings, "ENVIRONMENT", "development") == "production":
+        logger.warning("Recipe mutation without resolved user identity")
+    return None
+
+
+async def _get_activity_service(session: AsyncSession = Depends(get_async_session)):
+    from src.activity.service import ActivityService
+    return ActivityService(session)
 
 
 # ── CSV helpers ──
@@ -443,7 +465,7 @@ async def create_recipe(
 async def get_recipes(
     q: Optional[str] = Query(None, description="Search name, notes"),
     waste_type: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    status: Optional[RecipeStatus] = Query(None),
     sort_by: Optional[str] = Query(None),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
     limit: int = Query(100, ge=1, le=500),
@@ -461,7 +483,7 @@ async def get_recipes(
 @router.get("/recipes/export/csv")
 async def export_recipes_csv(
     waste_type: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    status: Optional[RecipeStatus] = Query(None),
     repo: RecipeRepository = Depends(get_recipe_repo),
 ):
     rows = await repo.get_all_for_export(waste_type=waste_type, status=status)
@@ -472,10 +494,10 @@ async def export_recipes_csv(
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeResponse)
 async def get_recipe(
-    recipe_id: str,
+    recipe_id: uuid_module.UUID = Path(...),
     repo: RecipeRepository = Depends(get_recipe_repo),
 ):
-    result = await repo.get_by_id(recipe_id)
+    result = await repo.get_by_id(str(recipe_id))
     if not result:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return result
@@ -483,44 +505,179 @@ async def get_recipe(
 
 @router.put("/recipes/{recipe_id}", response_model=RecipeResponse)
 async def update_recipe(
-    recipe_id: str,
-    data: RecipeUpdate,
+    request: Request,
+    recipe_id: uuid_module.UUID = Path(...),
+    data: RecipeUpdate = ...,
     repo: RecipeRepository = Depends(get_recipe_repo),
+    activity: "ActivityService" = Depends(_get_activity_service),
 ):
-    result = await repo.update(recipe_id, data.model_dump(exclude_unset=True))
+    user_id = _get_user_id(request)
+    rid = str(recipe_id)
+    result = await repo.update(
+        rid, data.model_dump(exclude_unset=True), created_by=user_id,
+    )
     if not result:
         raise HTTPException(status_code=404, detail="Recipe not found")
+    await activity.log_recipe_event(
+        action="update",
+        recipe_id=rid,
+        title=f"レシピ更新: {result['name']} v{result['current_version']}",
+        user_id=str(user_id) if user_id else None,
+        metadata={"version": result["current_version"]},
+    )
     return result
 
 
 @router.delete("/recipes/{recipe_id}")
 async def delete_recipe(
-    recipe_id: str,
+    recipe_id: uuid_module.UUID = Path(...),
     repo: RecipeRepository = Depends(get_recipe_repo),
 ):
-    if not await repo.delete(recipe_id):
+    if not await repo.delete(str(recipe_id)):
         raise HTTPException(status_code=404, detail="Recipe not found")
     return {"message": "Recipe deleted"}
 
 
 @router.post("/recipes/{recipe_id}/details", status_code=201, response_model=RecipeResponse)
 async def add_recipe_detail(
-    recipe_id: str,
-    data: RecipeDetailCreate,
+    request: Request,
+    recipe_id: uuid_module.UUID = Path(...),
+    data: RecipeDetailCreate = ...,
     repo: RecipeRepository = Depends(get_recipe_repo),
+    activity: "ActivityService" = Depends(_get_activity_service),
 ):
-    result = await repo.add_detail(recipe_id, data.model_dump())
+    user_id = _get_user_id(request)
+    rid = str(recipe_id)
+    result = await repo.add_detail(
+        rid, data.model_dump(), created_by=user_id,
+    )
     if not result:
         raise HTTPException(status_code=404, detail="Recipe not found")
+    await activity.log_recipe_event(
+        action="detail_add",
+        recipe_id=rid,
+        title=f"レシピ明細追加: {result['name']}",
+        user_id=str(user_id) if user_id else None,
+    )
     return result
 
 
 @router.delete("/recipes/{recipe_id}/details/{detail_id}")
 async def remove_recipe_detail(
-    recipe_id: str,
-    detail_id: str,
+    request: Request,
+    recipe_id: uuid_module.UUID = Path(...),
+    detail_id: uuid_module.UUID = Path(...),
+    repo: RecipeRepository = Depends(get_recipe_repo),
+    activity: "ActivityService" = Depends(_get_activity_service),
+):
+    user_id = _get_user_id(request)
+    rid = str(recipe_id)
+    if not await repo.remove_detail(rid, str(detail_id), created_by=user_id):
+        raise HTTPException(status_code=404, detail="Recipe detail not found")
+    await activity.log_recipe_event(
+        action="detail_remove",
+        recipe_id=rid,
+        title="レシピ明細削除",
+        user_id=str(user_id) if user_id else None,
+    )
+    return {"message": "Recipe detail removed"}
+
+
+# ══════════════════════════════════════════════
+#  Recipe Versions（バージョン管理）
+# ══════════════════════════════════════════════
+
+@router.get(
+    "/recipes/{recipe_id}/versions",
+    response_model=list[RecipeVersionListItem],
+)
+async def get_recipe_versions(
+    recipe_id: uuid_module.UUID = Path(...),
     repo: RecipeRepository = Depends(get_recipe_repo),
 ):
-    if not await repo.remove_detail(detail_id):
-        raise HTTPException(status_code=404, detail="Recipe detail not found")
-    return {"message": "Recipe detail removed"}
+    rid = str(recipe_id)
+    recipe = await repo.get_by_id(rid)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return await repo.get_versions(rid)
+
+
+@router.get(
+    "/recipes/{recipe_id}/versions/{version}",
+    response_model=RecipeVersionResponse,
+)
+async def get_recipe_version(
+    recipe_id: uuid_module.UUID = Path(...),
+    version: int = Path(..., ge=1),
+    repo: RecipeRepository = Depends(get_recipe_repo),
+):
+    result = await repo.get_version(str(recipe_id), version)
+    if not result:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return result
+
+
+@router.post(
+    "/recipes/{recipe_id}/versions/{version}/rollback",
+    response_model=RecipeResponse,
+)
+async def rollback_recipe_version(
+    request: Request,
+    recipe_id: uuid_module.UUID = Path(...),
+    version: int = Path(..., ge=1),
+    repo: RecipeRepository = Depends(get_recipe_repo),
+    activity: "ActivityService" = Depends(_get_activity_service),
+):
+    user_id = _get_user_id(request)
+    rid = str(recipe_id)
+    try:
+        result = await repo.rollback_to_version(
+            rid, version, created_by=user_id,
+        )
+    except OperationalError as exc:
+        logger.warning("Rollback lock conflict for recipe %s: %s", rid, exc)
+        raise HTTPException(status_code=409, detail="Concurrent modification conflict")
+    if not result:
+        raise HTTPException(status_code=404, detail="Recipe or version not found")
+    await activity.log_recipe_event(
+        action="rollback",
+        recipe_id=rid,
+        title=f"レシピロールバック: {result['name']} → v{version}",
+        severity="warning",
+        user_id=str(user_id) if user_id else None,
+        metadata={"target_version": version, "new_version": result["current_version"]},
+    )
+    return result
+
+
+@router.get(
+    "/recipes/{recipe_id}/versions/{version}/diff/current",
+    response_model=RecipeDiffResponse,
+)
+async def get_recipe_version_diff_current(
+    recipe_id: uuid_module.UUID = Path(...),
+    version: int = Path(..., ge=1),
+    repo: RecipeRepository = Depends(get_recipe_repo),
+):
+    result = await repo.diff_with_current(str(recipe_id), version)
+    if not result:
+        raise HTTPException(status_code=404, detail="Version or recipe not found")
+    return result
+
+
+@router.get(
+    "/recipes/{recipe_id}/versions/{v1}/diff/{v2}",
+    response_model=RecipeDiffResponse,
+)
+async def get_recipe_version_diff(
+    recipe_id: uuid_module.UUID = Path(...),
+    v1: int = Path(..., ge=1),
+    v2: int = Path(..., ge=1),
+    repo: RecipeRepository = Depends(get_recipe_repo),
+):
+    if v1 == v2:
+        raise HTTPException(status_code=400, detail="v1 and v2 must be different versions")
+    result = await repo.diff_versions(str(recipe_id), v1, v2)
+    if not result:
+        raise HTTPException(status_code=404, detail="One or both versions not found")
+    return result

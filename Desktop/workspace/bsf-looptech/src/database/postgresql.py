@@ -4,7 +4,7 @@ Handles relational data: users, waste records, material types.
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 import logging
 import uuid
@@ -64,8 +64,8 @@ class WasteRecord(Base):
 
     notes = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     supplier_rel = relationship("Supplier", back_populates="waste_records")
@@ -94,8 +94,8 @@ class MaterialType(Base):
     ph = Column(Float, nullable=True)
     moisture_content = Column(Float, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 # ── Supplier & Recipe Tables (Phase 1) ──
@@ -115,12 +115,13 @@ class Supplier(Base):
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     waste_records = relationship("WasteRecord", back_populates="supplier_rel")
     recipes = relationship("Recipe", back_populates="supplier_rel")
+    incoming_materials = relationship("IncomingMaterial", back_populates="supplier_rel")
 
 
 class SolidificationMaterial(Base):
@@ -140,8 +141,8 @@ class SolidificationMaterial(Base):
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class LeachingSuppressant(Base):
@@ -161,8 +162,8 @@ class LeachingSuppressant(Base):
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Recipe(Base):
@@ -178,12 +179,15 @@ class Recipe(Base):
     status = Column(String(20), nullable=False, default="draft")  # draft, active, archived
     notes = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    current_version = Column(Integer, nullable=False, default=1, server_default="1")
 
     # Relationships
     supplier_rel = relationship("Supplier", back_populates="recipes")
     details = relationship("RecipeDetail", back_populates="recipe", cascade="all, delete-orphan")
+    versions = relationship("RecipeVersion", back_populates="recipe", cascade="all, delete-orphan")
 
 
 class RecipeDetail(Base):
@@ -206,6 +210,152 @@ class RecipeDetail(Base):
     )
 
 
+# ── Recipe Versions (バージョン管理) ──
+
+
+class RecipeVersion(Base):
+    """Snapshot of a recipe at a specific version."""
+    __tablename__ = "recipe_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    recipe_id = Column(UUID(as_uuid=True), ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    name = Column(String(200), nullable=False)
+    supplier_id = Column(UUID(as_uuid=True), nullable=True)
+    waste_type = Column(String(100), nullable=False)
+    target_strength = Column(Float, nullable=True)
+    target_elution = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False)
+    notes = Column(Text, nullable=True)
+    change_summary = Column(Text, nullable=True)
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    recipe = relationship("Recipe", back_populates="versions")
+    details = relationship("RecipeVersionDetail", back_populates="version_record", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_recipe_versions_recipe_id", "recipe_id"),
+        Index("uq_recipe_versions_recipe_version", "recipe_id", "version", unique=True),
+    )
+
+
+class RecipeVersionDetail(Base):
+    """Snapshot of a recipe detail line at a specific version."""
+    __tablename__ = "recipe_version_details"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    version_id = Column(UUID(as_uuid=True), ForeignKey("recipe_versions.id", ondelete="CASCADE"), nullable=False)
+    material_id = Column(UUID(as_uuid=True), nullable=False)
+    material_type = Column(String(30), nullable=False)
+    addition_rate = Column(Float, nullable=False)
+    order_index = Column(Integer, nullable=False, default=0)
+    notes = Column(Text, nullable=True)
+
+    # Relationships
+    version_record = relationship("RecipeVersion", back_populates="details")
+
+    __table_args__ = (
+        Index("ix_recipe_version_details_version_id", "version_id"),
+    )
+
+
+# ── Incoming Materials & Delivery Schedules (Phase 6) ──
+
+
+class IncomingMaterial(Base):
+    """搬入物マスター — 3-level hierarchy: Supplier -> Category -> Name."""
+    __tablename__ = "incoming_materials"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False)
+    material_category = Column(String(100), nullable=False, index=True)
+    name = Column(String(200), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    default_weight_unit = Column(String(10), nullable=False, default="t")
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    supplier_rel = relationship("Supplier", back_populates="incoming_materials")
+    delivery_schedules = relationship("DeliverySchedule", back_populates="incoming_material_rel")
+
+    __table_args__ = (
+        Index("ix_incoming_materials_supplier_category", "supplier_id", "material_category"),
+    )
+
+
+class DeliverySchedule(Base):
+    """搬入予定 — scheduled delivery with auto WasteRecord creation."""
+    __tablename__ = "delivery_schedules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incoming_material_id = Column(UUID(as_uuid=True), ForeignKey("incoming_materials.id"), nullable=False)
+    scheduled_date = Column(DateTime, nullable=False, index=True)
+    estimated_weight = Column(Float, nullable=True)
+    actual_weight = Column(Float, nullable=True)
+    weight_unit = Column(String(10), nullable=False, default="t")
+    status = Column(String(20), nullable=False, default="scheduled")
+    waste_record_id = Column(UUID(as_uuid=True), ForeignKey("waste_records.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    incoming_material_rel = relationship("IncomingMaterial", back_populates="delivery_schedules")
+    waste_record_rel = relationship("WasteRecord", backref="delivery_schedule")
+
+    __table_args__ = (
+        Index("ix_delivery_schedules_status_date", "status", "scheduled_date"),
+    )
+
+
+# ── Formulation Workflow (搬入→配合連携) ──
+
+
+class FormulationRecord(Base):
+    """Formulation record linking WasteRecord to Recipe with planned/actual values."""
+    __tablename__ = "formulation_records"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    waste_record_id = Column(UUID(as_uuid=True), ForeignKey("waste_records.id"), nullable=False)
+    recipe_id = Column(UUID(as_uuid=True), ForeignKey("recipes.id"), nullable=True)
+    recipe_version = Column(Integer, nullable=True)
+    prediction_id = Column(UUID(as_uuid=True), ForeignKey("ml_predictions.id"), nullable=True)
+
+    source_type = Column(String(20), nullable=False, default="manual")  # manual, ml, similarity, rule, optimization, recipe
+    status = Column(String(20), nullable=False, default="proposed")  # proposed, accepted, applied, verified, rejected
+
+    planned_formulation = Column(JSON, nullable=True)  # {solidifierType, solidifierAmount, suppressorType, suppressorAmount, ...}
+    actual_formulation = Column(JSON, nullable=True)
+    elution_result = Column(JSON, nullable=True)
+    elution_passed = Column(Boolean, nullable=True)
+
+    estimated_cost = Column(Float, nullable=True)
+    actual_cost = Column(Float, nullable=True)
+    confidence = Column(Float, nullable=True)
+    reasoning = Column(JSON, nullable=True)  # list of reasoning strings
+
+    notes = Column(Text, nullable=True)
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    waste_record = relationship("WasteRecord", backref="formulation_records")
+    recipe = relationship("Recipe", backref="formulation_records")
+
+    __table_args__ = (
+        Index("ix_formulation_records_waste_record", "waste_record_id"),
+        Index("ix_formulation_records_status", "status"),
+        Index("ix_formulation_records_created", "created_at"),
+    )
+
+
 # ── ML Pipeline Tables (Phase 3) ──
 
 
@@ -225,7 +375,7 @@ class MLModel(Base):
     metrics = Column(JSON, nullable=False)
 
     is_active = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_ml_models_type_active", "model_type", "is_active"),
@@ -248,7 +398,7 @@ class MLPrediction(Base):
     actual_formulation = Column(JSON, nullable=True)
     actual_passed = Column(Boolean, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_ml_predictions_waste_record", "waste_record_id"),
@@ -270,8 +420,8 @@ class SubstrateKnowledge(Base):
     metadata_json = Column(JSON, nullable=True)
     embedding = Column(Text, nullable=True)  # pgvector Vector(768) handled at migration level
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class ChatSession(Base):
@@ -282,8 +432,8 @@ class ChatSession(Base):
     user_id = Column(UUID(as_uuid=True), nullable=True)  # nullable for SKIP_AUTH
     title = Column(String(200), nullable=False, default="New Chat")
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan",
                             order_by="ChatMessage.created_at")
@@ -300,7 +450,7 @@ class ChatMessage(Base):
     context_chunks = Column(JSON, nullable=True)  # referenced knowledge IDs + scores
     token_count = Column(Integer, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     session = relationship("ChatSession", back_populates="messages")
 
@@ -320,13 +470,39 @@ class BatchJobRun(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     job_name = Column(String(100), nullable=False, index=True)
     status = Column(String(20), nullable=False, default="running")  # running, success, failed
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
     result_summary = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_batch_job_runs_name_started", "job_name", "started_at"),
+    )
+
+
+# ── Activity Logs ──
+
+
+class ActivityLog(Base):
+    """Persistent audit trail for workflow events."""
+    __tablename__ = "activity_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_type = Column(String(50), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(UUID(as_uuid=True), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    action = Column(String(50), nullable=False)
+    title = Column(String(300), nullable=False)
+    description = Column(Text, nullable=True)
+    severity = Column(String(20), nullable=False, default="info")
+    metadata_json = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_activity_logs_entity", "entity_type", "entity_id"),
+        Index("ix_activity_logs_user_created", "user_id", "created_at"),
     )
 
 
@@ -352,8 +528,9 @@ async def init_database():
         from src.auth.models import User, UserSession, LoginAttempt, APIKey
         # Ensure all models are registered with Base.metadata
         _ = (Supplier, SolidificationMaterial, LeachingSuppressant, Recipe, RecipeDetail,
+             FormulationRecord,
              MLModel, MLPrediction, SubstrateKnowledge, ChatSession, ChatMessage,
-             BatchJobRun)
+             BatchJobRun, ActivityLog)
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

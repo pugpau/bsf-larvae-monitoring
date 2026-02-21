@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, IconButton, Button, Chip, Dialog, DialogActions, DialogContent,
-  DialogTitle, TextField, Stack, MenuItem, TablePagination,
+  DialogTitle, TextField, Stack, MenuItem,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Check as CheckIcon, Close as CloseIcon } from '@mui/icons-material';
 import {
@@ -10,10 +10,13 @@ import {
   deleteLeachingSuppressant, exportLeachingSuppressantsCsv, importLeachingSuppressantsCsv,
 } from '../../api/materialsApi';
 import type { LeachingSuppressant } from '../../types/api';
-import { useCrudList, ROWS_PER_PAGE_OPTIONS } from '../../hooks/useCrudList';
+import { useCrudList } from '../../hooks/useCrudList';
 import CrudListToolbar from '../common/CrudListToolbar';
+import JaTablePagination from '../common/JaTablePagination';
 import ConfirmDeleteDialog from '../common/ConfirmDeleteDialog';
 import NotificationSnackbar from '../common/NotificationSnackbar';
+import TableSkeleton from '../common/TableSkeleton';
+import EmptyState from '../common/EmptyState';
 
 const SUPPRESSANT_TYPES = [
   { value: 'chelate', label: 'キレート系' },
@@ -107,12 +110,12 @@ const LeachingSuppressantList: React.FC = () => {
           </TableHead>
           <TableBody>
             {crud.loading ? (
-              <TableRow>
-                <TableCell colSpan={colSpan} align="center" sx={{ py: 4, color: 'text.secondary' }}>読み込み中...</TableCell>
-              </TableRow>
+              <TableSkeleton columns={colSpan} />
             ) : crud.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={colSpan} align="center" sx={{ py: 4, color: 'text.secondary' }}>{emptyMessage}</TableCell>
+                <TableCell colSpan={colSpan}>
+                  <EmptyState title={emptyMessage} />
+                </TableCell>
               </TableRow>
             ) : (
               crud.items.map((item) => (
@@ -149,13 +152,10 @@ const LeachingSuppressantList: React.FC = () => {
             )}
           </TableBody>
         </Table>
-        <TablePagination
-          component="div" count={crud.total} page={crud.page}
+        <JaTablePagination
+          count={crud.total} page={crud.page}
           onPageChange={crud.handlePageChange} rowsPerPage={crud.rowsPerPage}
           onRowsPerPageChange={crud.handleRowsPerPageChange}
-          rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
-          labelRowsPerPage="表示件数:"
-          labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}件`}
         />
       </TableContainer>
 

@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, IconButton, Button, Chip, Dialog, DialogActions, DialogContent,
-  DialogTitle, Snackbar, Alert, Stack, TextField, MenuItem, TablePagination,
+  Paper, IconButton, Button, Chip, Stack, TextField, MenuItem,
   InputAdornment, Tooltip,
 } from '@mui/material';
 import {
@@ -11,18 +10,25 @@ import {
   Add as AddIcon,
   Search as SearchIcon,
   FileDownload as ExportIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import { fetchRecipes, deleteRecipe, exportRecipesCsv, downloadBlob } from '../../api/materialsApi';
 import type { Recipe } from '../../types/api';
 import RecipeForm from './RecipeForm';
+import RecipeVersionHistory from './RecipeVersionHistory';
+import TableSkeleton from '../common/TableSkeleton';
+import EmptyState from '../common/EmptyState';
+import JaTablePagination from '../common/JaTablePagination';
+import ConfirmDeleteDialog from '../common/ConfirmDeleteDialog';
+import NotificationSnackbar from '../common/NotificationSnackbar';
+import { useNotification } from '../../hooks/useNotification';
+import { DATA_CELL_SX } from '../../styles/dataCell';
 
 const STATUS_CONFIG: Record<string, { label: string; color: 'default' | 'primary' | 'success' | 'warning' }> = {
   draft: { label: '下書き', color: 'default' },
   active: { label: '有効', color: 'success' },
   archived: { label: 'アーカイブ', color: 'warning' },
 };
-
-const ROWS_PER_PAGE_OPTIONS = [25, 50, 100];
 
 const RecipeList: React.FC = () => {
   const [items, setItems] = useState<Recipe[]>([]);
@@ -34,11 +40,12 @@ const RecipeList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Recipe | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; target: Recipe | null }>({
+  const [deleteTarget, setDeleteTarget] = useState<Recipe | null>(null);
+  const { notification, notify, closeNotification } = useNotification();
+  const [versionHistory, setVersionHistory] = useState<{ open: boolean; target: Recipe | null }>({
     open: false,
     target: null,
   });
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,7 +59,7 @@ const RecipeList: React.FC = () => {
       setItems(result.items);
       setTotal(result.total);
     } catch {
-      setSnackbar({ open: true, message: 'データの読み込みに失敗しました', severity: 'error' });
+      notify('データの読み込みに失敗しました', 'error');
     } finally {
       setLoading(false);
     }
@@ -78,9 +85,9 @@ const RecipeList: React.FC = () => {
     try {
       const blob = await exportRecipesCsv();
       downloadBlob(blob, 'recipes.csv');
-      setSnackbar({ open: true, message: 'CSVをエクスポートしました', severity: 'success' });
+      notify('CSVをエクスポートしました');
     } catch {
-      setSnackbar({ open: true, message: 'エクスポートに失敗しました', severity: 'error' });
+      notify('エクスポートに失敗しました', 'error');
     }
   };
 
@@ -100,15 +107,15 @@ const RecipeList: React.FC = () => {
     if (saved) load();
   };
 
-  const handleDelete = async () => {
-    if (!deleteDialog.target) return;
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
-      await deleteRecipe(deleteDialog.target.id);
-      setDeleteDialog({ open: false, target: null });
-      setSnackbar({ open: true, message: '削除しました', severity: 'success' });
+      await deleteRecipe(deleteTarget.id);
+      setDeleteTarget(null);
+      notify('削除しました');
       load();
     } catch {
-      setSnackbar({ open: true, message: '削除に失敗しました', severity: 'error' });
+      notify('削除に失敗しました', 'error');
     }
   };
 
@@ -163,21 +170,21 @@ const RecipeList: React.FC = () => {
               <TableCell>廃棄物種類</TableCell>
               <TableCell align="right">目標強度</TableCell>
               <TableCell align="center">明細数</TableCell>
+              <TableCell align="center">Ver.</TableCell>
               <TableCell align="center">ステータス</TableCell>
               <TableCell align="center">操作</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                  読み込み中...
-                </TableCell>
-              </TableRow>
+              <TableSkeleton columns={7} />
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                  {searchQuery ? '検索結果が見つかりません' : 'レシピが登録されていません'}
+                <TableCell colSpan={7}>
+                  <EmptyState
+                    title={searchQuery ? '検索結果が見つかりません' : 'レシピが登録されていません'}
+                    description={searchQuery ? '検索条件を変更してください' : '「新規作成」からレシピを追加してください'}
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -187,20 +194,34 @@ const RecipeList: React.FC = () => {
                   <TableRow key={item.id} sx={{ cursor: 'pointer' }}>
                     <TableCell sx={{ fontWeight: 500 }}>{item.name}</TableCell>
                     <TableCell>{item.waste_type}</TableCell>
-                    <TableCell align="right" sx={{ fontFamily: "'Fira Code', monospace" }}>
+                    <TableCell align="right" sx={DATA_CELL_SX}>
                       {item.target_strength != null ? `${item.target_strength.toLocaleString()} kN/m²` : '-'}
                     </TableCell>
                     <TableCell align="center">
                       <Chip label={`${item.details?.length || 0} 材料`} size="small" variant="outlined" />
                     </TableCell>
                     <TableCell align="center">
+                      <Chip
+                        label={`v${item.current_version || 1}`}
+                        size="small"
+                        variant="outlined"
+                        color="info"
+                        sx={{ ...DATA_CELL_SX, fontSize: '0.75rem' }}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
                       <Chip label={statusCfg.label} size="small" color={statusCfg.color} variant="outlined" />
                     </TableCell>
                     <TableCell align="center">
+                      <Tooltip title="バージョン履歴">
+                        <IconButton size="small" onClick={() => setVersionHistory({ open: true, target: item })} color="info" aria-label="バージョン履歴">
+                          <HistoryIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <IconButton size="small" onClick={() => handleOpenEdit(item)} color="primary" aria-label="編集">
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => setDeleteDialog({ open: true, target: item })} color="error" aria-label="削除">
+                      <IconButton size="small" onClick={() => setDeleteTarget(item)} color="error" aria-label="削除">
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
@@ -210,16 +231,12 @@ const RecipeList: React.FC = () => {
             )}
           </TableBody>
         </Table>
-        <TablePagination
-          component="div"
+        <JaTablePagination
           count={total}
           page={page}
           onPageChange={handlePageChange}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={handleRowsPerPageChange}
-          rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
-          labelRowsPerPage="表示件数:"
-          labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}件`}
         />
       </TableContainer>
 
@@ -229,23 +246,33 @@ const RecipeList: React.FC = () => {
       )}
 
       {/* Delete Confirmation */}
-      <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, target: null })}>
-        <DialogTitle>削除確認</DialogTitle>
-        <DialogContent>
-          <Typography>「{deleteDialog.target?.name}」を削除しますか？</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            配合明細もすべて削除されます。
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialog({ open: false, target: null })}>キャンセル</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">削除</Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDeleteDialog
+        open={deleteTarget !== null}
+        targetName={deleteTarget?.name}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
-      <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
-        <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
-      </Snackbar>
+      {/* Version History Dialog */}
+      {versionHistory.open && versionHistory.target && (
+        <RecipeVersionHistory
+          open={versionHistory.open}
+          recipeId={versionHistory.target.id}
+          recipeName={versionHistory.target.name}
+          currentVersion={versionHistory.target.current_version || 1}
+          onClose={(changed) => {
+            setVersionHistory({ open: false, target: null });
+            if (changed) load();
+          }}
+        />
+      )}
+
+      <NotificationSnackbar
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={closeNotification}
+      />
     </Box>
   );
 };

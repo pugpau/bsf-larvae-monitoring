@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, text
@@ -24,8 +24,8 @@ async def create_session(
         id=uuid.uuid4(),
         title=title,
         user_id=user_id,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     session.add(chat_session)
     await session.commit()
@@ -51,14 +51,13 @@ async def list_sessions(
     session: AsyncSession,
     offset: int = 0,
     limit: int = 20,
+    user_id: Optional[uuid.UUID] = None,
 ) -> list[ChatSession]:
-    """List chat sessions, newest first."""
-    stmt = (
-        select(ChatSession)
-        .order_by(ChatSession.updated_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
+    """List chat sessions, newest first. Optionally filter by user_id."""
+    stmt = select(ChatSession).order_by(ChatSession.updated_at.desc())
+    if user_id is not None:
+        stmt = stmt.where(ChatSession.user_id == user_id)
+    stmt = stmt.offset(offset).limit(limit)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -92,14 +91,14 @@ async def add_message(
         content=content,
         context_chunks=context_chunks,
         token_count=token_count,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     session.add(message)
 
     # Update session timestamp
     chat_session = await session.get(ChatSession, session_id)
     if chat_session is not None:
-        chat_session.updated_at = datetime.utcnow()
+        chat_session.updated_at = datetime.now(timezone.utc)
 
     await session.commit()
     await session.refresh(message)

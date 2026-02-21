@@ -14,6 +14,8 @@ from src.database.postgresql import (
     LeachingSuppressant,
     Recipe,
     RecipeDetail,
+    RecipeVersion,
+    RecipeVersionDetail,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,7 +131,7 @@ class _BaseRepository:
         for key, value in filters.items():
             if value is not None and hasattr(self.model_class, key):
                 stmt = stmt.where(getattr(self.model_class, key) == value)
-        stmt = stmt.order_by(self.model_class.created_at.desc())
+        stmt = stmt.order_by(self.model_class.created_at.desc()).limit(50000)
         result = await self.session.execute(stmt)
         return [self._to_dict(obj) for obj in result.scalars().all()]
 
@@ -305,19 +307,48 @@ class RecipeRepository:
         items = [self._to_dict(r) for r in result.scalars().all()]
         return items, total
 
-    async def update(self, recipe_id: str, data: dict) -> Optional[dict]:
+    async def update(
+        self,
+        recipe_id: str,
+        data: dict,
+        *,
+        created_by: Optional[uuid.UUID] = None,
+    ) -> Optional[dict]:
         uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
-        clean = {k: v for k, v in data.items() if v is not None}
+        change_summary = data.get("change_summary")
+        clean = {k: v for k, v in data.items() if v is not None and k != "change_summary"}
         if not clean:
             return await self.get_by_id(recipe_id)
+
+        # Lock row to prevent concurrent version conflicts (PostgreSQL only)
+        lock_result = await self.session.execute(
+            select(Recipe)
+            .where(Recipe.id == uid)
+            .with_for_update()
+            .options(selectinload(Recipe.details))
+        )
+        recipe_obj = lock_result.scalar_one_or_none()
+        if not recipe_obj:
+            return None
+
+        current = self._to_dict(recipe_obj)
+
+        # Check if there's an actual change
+        has_change = any(
+            clean.get(k) != current.get(k) for k in clean if k in current
+        )
+        if has_change:
+            await self._snapshot_current_version(
+                current, change_summary, created_by=created_by,
+            )
+            clean["current_version"] = current["current_version"] + 1
+
         stmt = (
             update(Recipe)
             .where(Recipe.id == uid)
             .values(**clean)
         )
-        result = await self.session.execute(stmt)
-        if result.rowcount == 0:
-            return None
+        await self.session.execute(stmt)
         await self.session.commit()
         return await self.get_by_id(recipe_id)
 
@@ -328,11 +359,40 @@ class RecipeRepository:
         await self.session.commit()
         return result.rowcount > 0
 
-    async def add_detail(self, recipe_id: str, detail_data: dict) -> Optional[dict]:
+    async def add_detail(
+        self,
+        recipe_id: str,
+        detail_data: dict,
+        *,
+        created_by: Optional[uuid.UUID] = None,
+    ) -> Optional[dict]:
         uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
-        recipe = await self.get_by_id(recipe_id)
-        if not recipe:
+
+        # Lock row for version safety
+        lock_result = await self.session.execute(
+            select(Recipe)
+            .where(Recipe.id == uid)
+            .with_for_update()
+            .options(selectinload(Recipe.details))
+        )
+        recipe_obj = lock_result.scalar_one_or_none()
+        if not recipe_obj:
             return None
+
+        current = self._to_dict(recipe_obj)
+
+        # Snapshot current state before adding detail
+        mat_type = detail_data.get("material_type", "")
+        await self._snapshot_current_version(
+            current,
+            f"明細追加: {mat_type}",
+            created_by=created_by,
+        )
+        new_version = current["current_version"] + 1
+        await self.session.execute(
+            update(Recipe).where(Recipe.id == uid).values(current_version=new_version)
+        )
+
         detail = RecipeDetail(
             id=uuid.uuid4(),
             recipe_id=uid,
@@ -340,14 +400,60 @@ class RecipeRepository:
         )
         self.session.add(detail)
         await self.session.commit()
+        # Expire cached recipe so get_by_id reloads updated details
+        self.session.expire(recipe_obj)
         return await self.get_by_id(recipe_id)
 
-    async def remove_detail(self, detail_id: str) -> bool:
-        uid = uuid.UUID(detail_id) if isinstance(detail_id, str) else detail_id
-        stmt = delete(RecipeDetail).where(RecipeDetail.id == uid)
-        result = await self.session.execute(stmt)
+    async def remove_detail(
+        self,
+        recipe_id: str,
+        detail_id: str,
+        *,
+        created_by: Optional[uuid.UUID] = None,
+    ) -> bool:
+        uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
+        detail_uid = uuid.UUID(detail_id) if isinstance(detail_id, str) else detail_id
+
+        # Lock recipe row for version safety
+        lock_result = await self.session.execute(
+            select(Recipe)
+            .where(Recipe.id == uid)
+            .with_for_update()
+            .options(selectinload(Recipe.details))
+        )
+        recipe_obj = lock_result.scalar_one_or_none()
+        if not recipe_obj:
+            return False
+
+        # Verify detail belongs to this recipe BEFORE snapshotting
+        detail_check = await self.session.execute(
+            select(RecipeDetail.id).where(
+                RecipeDetail.id == detail_uid,
+                RecipeDetail.recipe_id == uid,
+            )
+        )
+        if detail_check.scalar_one_or_none() is None:
+            return False
+
+        current = self._to_dict(recipe_obj)
+
+        # Snapshot current state before removing detail
+        await self._snapshot_current_version(
+            current, "明細削除", created_by=created_by,
+        )
+        new_version = current["current_version"] + 1
+        await self.session.execute(
+            update(Recipe).where(Recipe.id == uid).values(current_version=new_version)
+        )
+
+        await self.session.execute(
+            delete(RecipeDetail).where(
+                RecipeDetail.id == detail_uid,
+                RecipeDetail.recipe_id == uid,
+            )
+        )
         await self.session.commit()
-        return result.rowcount > 0
+        return True
 
     async def get_all_for_export(
         self,
@@ -360,9 +466,245 @@ class RecipeRepository:
             stmt = stmt.where(Recipe.waste_type == waste_type)
         if status is not None:
             stmt = stmt.where(Recipe.status == status)
-        stmt = stmt.order_by(Recipe.created_at.desc())
+        stmt = stmt.order_by(Recipe.created_at.desc()).limit(50000)
         result = await self.session.execute(stmt)
         return [self._to_dict(r) for r in result.scalars().all()]
+
+    # ── Version Management ──
+
+    _MAX_SUMMARY_LEN = 500
+
+    async def _snapshot_current_version(
+        self,
+        recipe_dict: dict,
+        change_summary: Optional[str] = None,
+        *,
+        created_by: Optional[uuid.UUID] = None,
+    ) -> None:
+        """Save the current recipe state as a version snapshot."""
+        if change_summary and len(change_summary) > self._MAX_SUMMARY_LEN:
+            change_summary = change_summary[:self._MAX_SUMMARY_LEN]
+        version = RecipeVersion(
+            id=uuid.uuid4(),
+            recipe_id=recipe_dict["id"],
+            version=recipe_dict["current_version"],
+            name=recipe_dict["name"],
+            supplier_id=recipe_dict.get("supplier_id"),
+            waste_type=recipe_dict["waste_type"],
+            target_strength=recipe_dict.get("target_strength"),
+            target_elution=recipe_dict.get("target_elution"),
+            status=recipe_dict["status"],
+            notes=recipe_dict.get("notes"),
+            change_summary=change_summary,
+            created_by=created_by,
+        )
+        self.session.add(version)
+        await self.session.flush()
+
+        for det in recipe_dict.get("details", []):
+            vd = RecipeVersionDetail(
+                id=uuid.uuid4(),
+                version_id=version.id,
+                material_id=det["material_id"],
+                material_type=det["material_type"],
+                addition_rate=det["addition_rate"],
+                order_index=det.get("order_index", 0),
+                notes=det.get("notes"),
+            )
+            self.session.add(vd)
+
+    async def get_versions(self, recipe_id: str) -> list[dict]:
+        """Get version history for a recipe (descending, max 100)."""
+        uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
+        stmt = (
+            select(RecipeVersion)
+            .where(RecipeVersion.recipe_id == uid)
+            .order_by(RecipeVersion.version.desc())
+            .limit(100)
+        )
+        result = await self.session.execute(stmt)
+        return [
+            {c.name: getattr(v, c.name) for c in v.__table__.columns}
+            for v in result.scalars().all()
+        ]
+
+    async def get_version(self, recipe_id: str, version: int) -> Optional[dict]:
+        """Get a specific version snapshot with details."""
+        uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
+        stmt = (
+            select(RecipeVersion)
+            .where(RecipeVersion.recipe_id == uid, RecipeVersion.version == version)
+            .options(selectinload(RecipeVersion.details))
+        )
+        result = await self.session.execute(stmt)
+        v = result.scalar_one_or_none()
+        if not v:
+            return None
+        d = {c.name: getattr(v, c.name) for c in v.__table__.columns}
+        d["details"] = [
+            {c.name: getattr(det, c.name) for c in det.__table__.columns}
+            for det in v.details
+        ]
+        return d
+
+    async def rollback_to_version(
+        self,
+        recipe_id: str,
+        version: int,
+        *,
+        created_by: Optional[uuid.UUID] = None,
+    ) -> Optional[dict]:
+        """Rollback recipe to a specific version. Snapshots current state first."""
+        uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
+
+        # Lock row and load current state atomically
+        lock_result = await self.session.execute(
+            select(Recipe)
+            .where(Recipe.id == uid)
+            .with_for_update()
+            .options(selectinload(Recipe.details))
+        )
+        recipe_obj = lock_result.scalar_one_or_none()
+        if not recipe_obj:
+            return None
+
+        # Load target version inside lock scope
+        target = await self.get_version(recipe_id, version)
+        if not target:
+            return None
+
+        current = self._to_dict(recipe_obj)
+
+        # Snapshot current state before rollback
+        await self._snapshot_current_version(
+            current,
+            f"Rolled back to version {version}",
+            created_by=created_by,
+        )
+        new_version = current["current_version"] + 1
+
+        # Update recipe header from target version
+        stmt = (
+            update(Recipe)
+            .where(Recipe.id == uid)
+            .values(
+                name=target["name"],
+                supplier_id=target.get("supplier_id"),
+                waste_type=target["waste_type"],
+                target_strength=target.get("target_strength"),
+                target_elution=target.get("target_elution"),
+                status=target["status"],
+                notes=target.get("notes"),
+                current_version=new_version,
+            )
+        )
+        await self.session.execute(stmt)
+
+        # Replace details: delete current, copy from target version
+        await self.session.execute(
+            delete(RecipeDetail).where(RecipeDetail.recipe_id == uid)
+        )
+        for det in target.get("details", []):
+            self.session.add(RecipeDetail(
+                id=uuid.uuid4(),
+                recipe_id=uid,
+                material_id=det["material_id"],
+                material_type=det["material_type"],
+                addition_rate=det["addition_rate"],
+                order_index=det.get("order_index", 0),
+                notes=det.get("notes"),
+            ))
+
+        await self.session.commit()
+        self.session.expire(recipe_obj)
+        return await self.get_by_id(recipe_id)
+
+    def _compute_diff(
+        self,
+        old_dict: dict,
+        new_dict: dict,
+        recipe_id,
+        version_from,
+        version_to,
+    ) -> dict:
+        """Compute diff between two recipe states."""
+        header_fields = [
+            "name", "supplier_id", "waste_type", "target_strength",
+            "target_elution", "status", "notes",
+        ]
+        header_changes = []
+        for field in header_fields:
+            old_val = old_dict.get(field)
+            new_val = new_dict.get(field)
+            if old_val != new_val:
+                header_changes.append({
+                    "field": field,
+                    "old_value": old_val,
+                    "new_value": new_val,
+                })
+
+        def _detail_key(d: dict) -> str:
+            return f"{d['material_id']}:{d.get('order_index', 0)}"
+
+        old_details = {_detail_key(d): d for d in old_dict.get("details", [])}
+        new_details = {_detail_key(d): d for d in new_dict.get("details", [])}
+
+        old_keys = set(old_details.keys())
+        new_keys = set(new_details.keys())
+
+        details_added = [new_details[k] for k in new_keys - old_keys]
+        details_removed = [old_details[k] for k in old_keys - new_keys]
+
+        details_modified = []
+        for k in old_keys & new_keys:
+            old_d = old_details[k]
+            new_d = new_details[k]
+            changes = {}
+            for f in ("addition_rate", "order_index", "notes", "material_type"):
+                if old_d.get(f) != new_d.get(f):
+                    changes[f] = {"old": old_d.get(f), "new": new_d.get(f)}
+            if changes:
+                changes["material_id"] = k
+                details_modified.append(changes)
+
+        return {
+            "recipe_id": recipe_id,
+            "version_from": version_from,
+            "version_to": version_to,
+            "header_changes": header_changes,
+            "details_added": details_added,
+            "details_removed": details_removed,
+            "details_modified": details_modified,
+        }
+
+    async def diff_versions(
+        self, recipe_id: str, v1: int, v2: int
+    ) -> Optional[dict]:
+        """Compute diff between two versions."""
+        ver1 = await self.get_version(recipe_id, v1)
+        ver2 = await self.get_version(recipe_id, v2)
+        if not ver1 or not ver2:
+            return None
+
+        uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
+        return self._compute_diff(ver1, ver2, uid, v1, v2)
+
+    async def diff_with_current(
+        self, recipe_id: str, version: int
+    ) -> Optional[dict]:
+        """Compute diff between a stored version and the current live recipe."""
+        ver = await self.get_version(recipe_id, version)
+        if not ver:
+            return None
+
+        current = await self.get_by_id(recipe_id)
+        if not current:
+            return None
+
+        uid = uuid.UUID(recipe_id) if isinstance(recipe_id, str) else recipe_id
+        return self._compute_diff(
+            ver, current, uid, version, current["current_version"],
+        )
 
     def _to_dict(self, recipe: Recipe) -> dict:
         d = {c.name: getattr(recipe, c.name) for c in recipe.__table__.columns}

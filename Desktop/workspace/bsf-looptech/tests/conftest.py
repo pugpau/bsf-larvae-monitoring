@@ -61,6 +61,7 @@ def _patched_uuid_bind_processor(self, dialect):
 _sqltypes.Uuid.bind_processor = _patched_uuid_bind_processor
 
 from src.database.postgresql import Base
+from src.auth.models import User  # noqa: F401 — FK target for activity_logs
 
 
 @pytest.fixture

@@ -6,8 +6,8 @@ Handles JWT tokens, password hashing, and security validations.
 import os
 import secrets
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional, Union, Dict, Any, Set
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Union, Dict, Any
 import jwt
 from jwt.exceptions import PyJWTError
 from passlib.context import CryptContext
@@ -37,15 +37,29 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # auto_error=False allows requests without token when SKIP_AUTH is enabled
 security = HTTPBearer(auto_error=False)
 
-# In-memory token blacklist (JTI set).
+# In-memory token blacklist (JTI → expiry timestamp).
 # NOTE: Not shared across workers; acceptable for single-process closed-network deployment.
 # For multi-worker setups, replace with Redis-backed blacklist.
-_token_blacklist: Set[str] = set()
+_token_blacklist: Dict[str, float] = {}
 
 
-def blacklist_token(jti: str) -> None:
-    """Add a token's JTI to the blacklist (called on logout)."""
-    _token_blacklist.add(jti)
+def blacklist_token(jti: str, exp: float = 0.0) -> None:
+    """Add a token's JTI to the blacklist (called on logout).
+
+    Args:
+        jti: The JWT ID to blacklist.
+        exp: Token expiry as a UTC timestamp. Entries are auto-cleaned after expiry.
+             If 0 or not provided, a 24-hour TTL is used as a safety net.
+    """
+    now = datetime.now(timezone.utc).timestamp()
+    # Auto-cleanup expired entries (only those with a real expiry)
+    expired = [j for j, e in _token_blacklist.items() if e > 0 and e < now]
+    for j in expired:
+        del _token_blacklist[j]
+    # If no expiry provided, set a 24-hour safety TTL
+    if exp <= 0:
+        exp = now + 86400
+    _token_blacklist[jti] = exp
 
 
 def is_token_blacklisted(jti: str) -> bool:
@@ -122,9 +136,9 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=SecurityConfig.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=SecurityConfig.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"exp": expire, "type": "access", "jti": str(uuid.uuid4())})
 
@@ -137,9 +151,9 @@ def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=SecurityConfig.REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.now(timezone.utc) + timedelta(days=SecurityConfig.REFRESH_TOKEN_EXPIRE_DAYS)
 
     to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
 
@@ -162,7 +176,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[Dict[str, A
 
         # Check expiration
         exp = payload.get("exp")
-        if exp is None or datetime.utcfromtimestamp(exp) < datetime.utcnow():
+        if exp is None or datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(timezone.utc):
             return None
 
         # Check blacklist
@@ -203,18 +217,23 @@ def verify_api_key(api_key: str, hashed_key: str) -> bool:
 
 
 def _create_dev_user() -> User:
-    """Create a development user for SKIP_AUTH mode."""
-    from uuid import uuid4
+    """Create a development user for SKIP_AUTH mode.
+
+    Uses a fixed UUID so that all requests in SKIP_AUTH mode share the
+    same identity (important for ownership checks on chat sessions, etc.).
+    """
     dev_user = User(
-        id=uuid4(),
+        id=uuid.UUID("aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa"),
         username="dev_user",
-        email="dev@localhost",
+        email="dev@example.com",
         hashed_password="",
         full_name="Development User",
         role="admin",
         is_active=True,
         is_verified=True,
-        is_superuser=True
+        is_superuser=True,
+        created_at=datetime.now(timezone.utc),
+        force_password_change=False,
     )
     return dev_user
 
@@ -313,23 +332,30 @@ def require_permission(permission: Permission):
     return permission_checker
 
 
-def require_role(required_role: str):
+def require_role(required_role):
     """
     Decorator to require specific role for endpoint access.
     Returns a dependency function that checks user role.
+    Accepts both string and UserRole enum values.
     """
     async def role_checker(
         current_user: User = Depends(get_current_active_user)
     ) -> User:
         """Check if current user has required role."""
-        if current_user.role != required_role:
+        # Development mode - skip role check
+        if SKIP_AUTH:
+            return current_user
+        # Normalize enum to string for comparison
+        required = required_role.value if hasattr(required_role, 'value') else required_role
+        actual = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+        if actual != required:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Not enough permissions. Required role: {required_role}"
             )
-        
+
         return current_user
-    
+
     return role_checker
 
 

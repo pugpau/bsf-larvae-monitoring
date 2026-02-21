@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select, update, func, and_
@@ -121,7 +121,7 @@ class ModelRegistry:
 
     async def get_prediction_accuracy(self, days: int = 30) -> Dict[str, Any]:
         """Calculate prediction accuracy metrics over the last N days."""
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         result = await self.session.execute(
             select(MLPrediction).where(
                 MLPrediction.created_at >= cutoff,
@@ -152,7 +152,7 @@ class ModelRegistry:
 
     async def get_trend_data(self, months: int = 6) -> List[Dict[str, Any]]:
         """Get monthly aggregated prediction data for trend charts."""
-        cutoff = datetime.utcnow() - timedelta(days=months * 30)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=months * 30)
         result = await self.session.execute(
             select(MLPrediction).where(MLPrediction.created_at >= cutoff)
             .order_by(MLPrediction.created_at)

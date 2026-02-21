@@ -9,6 +9,9 @@ import type {
   SolidificationMaterial,
   LeachingSuppressant,
   Recipe,
+  RecipeVersionListItem,
+  RecipeVersionResponse,
+  RecipeDiffResponse,
   PaginatedResponse,
   ListParams,
   ImportResult,
@@ -183,7 +186,10 @@ export const createRecipe = async (payload: {
   return data;
 };
 
-export const updateRecipe = async (id: string, payload: Partial<Recipe>): Promise<Recipe> => {
+export const updateRecipe = async (
+  id: string,
+  payload: Partial<Recipe> & { change_summary?: string },
+): Promise<Recipe> => {
   const { data } = await api.put(`/recipes/${id}`, payload);
   return data;
 };
@@ -212,6 +218,47 @@ export const removeRecipeDetail = async (recipeId: string, detailId: string): Pr
 
 export const exportRecipesCsv = async (): Promise<Blob> => {
   const { data } = await api.get('/recipes/export/csv', { responseType: 'blob' });
+  return data;
+};
+
+
+// ── Recipe Versions ──
+
+export const fetchRecipeVersions = async (recipeId: string): Promise<RecipeVersionListItem[]> => {
+  const { data } = await api.get(`/recipes/${recipeId}/versions`);
+  return data;
+};
+
+export const fetchRecipeVersion = async (
+  recipeId: string,
+  version: number,
+): Promise<RecipeVersionResponse> => {
+  const { data } = await api.get(`/recipes/${recipeId}/versions/${version}`);
+  return data;
+};
+
+export const rollbackRecipeVersion = async (
+  recipeId: string,
+  version: number,
+): Promise<Recipe> => {
+  const { data } = await api.post(`/recipes/${recipeId}/versions/${version}/rollback`);
+  return data;
+};
+
+export const fetchRecipeVersionDiff = async (
+  recipeId: string,
+  v1: number,
+  v2: number,
+): Promise<RecipeDiffResponse> => {
+  const { data } = await api.get(`/recipes/${recipeId}/versions/${v1}/diff/${v2}`);
+  return data;
+};
+
+export const fetchRecipeVersionDiffWithCurrent = async (
+  recipeId: string,
+  version: number,
+): Promise<RecipeDiffResponse> => {
+  const { data } = await api.get(`/recipes/${recipeId}/versions/${version}/diff/current`);
   return data;
 };
 

@@ -12,9 +12,8 @@ from src.rag.schemas import ChatResponse, KnowledgeSearchResult
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "あなたはBSF-LoopTech廃棄物処理配合最適化システムのアシスタントです。"
-    "BSF（ブラックソルジャーフライ）幼虫を用いた有機廃棄物処理、"
-    "基材配合、固化処理、溶出試験に関する質問に回答してください。"
+    "あなたはERC製品管理システムのアシスタントです。"
+    "廃棄物処理配合最適化、基材配合、固化処理、溶出試験に関する質問に回答してください。"
     "以下のコンテキスト情報を参考にしてください。\n\n"
 )
 
@@ -73,14 +72,19 @@ async def ask_with_rag_stream(
     yield "event: done\ndata: {}\n\n"
 
 
-def _build_context(results: list[KnowledgeSearchResult]) -> str:
-    """Format context chunks for the prompt."""
+def _build_context(results: list[KnowledgeSearchResult], max_chars: int = 4000) -> str:
+    """Format context chunks for the prompt, truncating at max_chars."""
     if not results:
         return "コンテキスト情報はありません。一般的な知識に基づいて回答してください。"
 
     parts = ["コンテキスト:"]
+    current_len = len(parts[0])
     for i, r in enumerate(results, 1):
-        parts.append(f"[{i}] {r.title}: {r.content}")
+        chunk = f"[{i}] {r.title}: {r.content}"
+        if current_len + len(chunk) + 1 > max_chars:
+            break
+        parts.append(chunk)
+        current_len += len(chunk) + 1
     return "\n".join(parts)
 
 

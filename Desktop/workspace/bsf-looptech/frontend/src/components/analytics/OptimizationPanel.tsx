@@ -9,8 +9,9 @@ import {
   CircularProgress, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
-import { optimizeFormulation } from '../../utils/apiClient';
+import { optimizeFormulation } from '../../api/mlApi';
 import { WASTE_TYPES } from '../../constants/waste';
+import { PALETTE } from '../../constants/colors';
 
 interface CostItem {
   material_name: string;
@@ -250,7 +251,7 @@ const OptimizationPanel: React.FC = () => {
                         <TableCell align="right" sx={{
                           fontFamily: "'Fira Code', monospace",
                           fontWeight: 700,
-                          color: '#1E40AF',
+                          color: PALETTE.primary.main,
                         }}>
                           ¥{result.total_cost.toLocaleString()}
                         </TableCell>

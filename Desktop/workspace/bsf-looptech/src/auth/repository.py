@@ -4,7 +4,7 @@ Handles database operations for authentication and authorization.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, and_, or_, func
@@ -46,7 +46,7 @@ class UserRepository:
             hashed_password=hashed_password,
             full_name=full_name,
             role=role,
-            password_changed_at=datetime.utcnow(),
+            password_changed_at=datetime.now(timezone.utc),
             **kwargs
         )
         
@@ -92,7 +92,7 @@ class UserRepository:
             return None
         
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         user.failed_login_attempts = 0  # Reset failed attempts
         await self.session.commit()
         await self.session.refresh(user)  # Ensure all fields are loaded
@@ -104,7 +104,7 @@ class UserRepository:
         result = await self.session.execute(
             update(User)
             .where(User.id == user_id)
-            .values(updated_at=datetime.utcnow(), **kwargs)
+            .values(updated_at=datetime.now(timezone.utc), **kwargs)
             .returning(User)
         )
         
@@ -124,9 +124,9 @@ class UserRepository:
             .where(User.id == user_id)
             .values(
                 hashed_password=hashed_password,
-                password_changed_at=datetime.utcnow(),
+                password_changed_at=datetime.now(timezone.utc),
                 force_password_change=False,
-                updated_at=datetime.utcnow()
+                updated_at=datetime.now(timezone.utc)
             )
         )
         
@@ -140,7 +140,7 @@ class UserRepository:
     async def lock_user_account(self, user_id: str, duration_minutes: int = None) -> bool:
         """Lock user account temporarily or permanently."""
         if duration_minutes:
-            locked_until = datetime.utcnow() + timedelta(minutes=duration_minutes)
+            locked_until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
         else:
             locked_until = None  # Permanent lock
         
@@ -150,7 +150,7 @@ class UserRepository:
             .values(
                 is_active=False if not duration_minutes else True,
                 locked_until=locked_until,
-                updated_at=datetime.utcnow()
+                updated_at=datetime.now(timezone.utc)
             )
         )
         
@@ -170,7 +170,7 @@ class UserRepository:
                 is_active=True,
                 locked_until=None,
                 failed_login_attempts=0,
-                updated_at=datetime.utcnow()
+                updated_at=datetime.now(timezone.utc)
             )
         )
         
@@ -201,7 +201,7 @@ class UserRepository:
                 .where(User.id == user.id)
                 .values(
                     failed_login_attempts=new_count,
-                    updated_at=datetime.utcnow()
+                    updated_at=datetime.now(timezone.utc)
                 )
             )
             await self.session.commit()
@@ -238,7 +238,7 @@ class UserRepository:
                 is_active=False,
                 username=func.concat(User.username, "_deleted_", func.extract('epoch', func.now())),
                 email=func.concat(User.email, "_deleted_", func.extract('epoch', func.now())),
-                updated_at=datetime.utcnow()
+                updated_at=datetime.now(timezone.utc)
             )
         )
         
@@ -279,7 +279,7 @@ class UserRepository:
                 user_id=user_id,
                 farm_id=farm_id,
                 granted_by=granted_by_id,
-                granted_at=datetime.utcnow()
+                granted_at=datetime.now(timezone.utc)
             )
         )
         
@@ -335,7 +335,7 @@ class SessionRepository:
         device_info: Dict[str, Any] = None
     ) -> UserSession:
         """Create new user session."""
-        expires_at = datetime.utcnow() + timedelta(minutes=SecurityConfig.SESSION_TIMEOUT_MINUTES)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=SecurityConfig.SESSION_TIMEOUT_MINUTES)
         
         session_obj = UserSession(
             user_id=user_id,
@@ -360,7 +360,7 @@ class SessionRepository:
                 and_(
                     UserSession.session_token == session_token,
                     UserSession.is_active == True,
-                    UserSession.expires_at > datetime.utcnow()
+                    UserSession.expires_at > datetime.now(timezone.utc)
                 )
             )
             .options(selectinload(UserSession.user))
@@ -372,7 +372,7 @@ class SessionRepository:
         result = await self.session.execute(
             update(UserSession)
             .where(UserSession.session_token == session_token)
-            .values(last_activity=datetime.utcnow())
+            .values(last_activity=datetime.now(timezone.utc))
         )
         
         if result.rowcount > 0:
@@ -388,7 +388,7 @@ class SessionRepository:
             .where(UserSession.session_token == session_token)
             .values(
                 is_active=False,
-                revoked_at=datetime.utcnow(),
+                revoked_at=datetime.now(timezone.utc),
                 revoked_by=revoked_by
             )
         )
@@ -413,7 +413,7 @@ class SessionRepository:
         
         query = query.values(
             is_active=False,
-            revoked_at=datetime.utcnow()
+            revoked_at=datetime.now(timezone.utc)
         )
         
         result = await self.session.execute(query)
@@ -428,12 +428,12 @@ class SessionRepository:
             .where(
                 and_(
                     UserSession.is_active == True,
-                    UserSession.expires_at < datetime.utcnow()
+                    UserSession.expires_at < datetime.now(timezone.utc)
                 )
             )
             .values(
                 is_active=False,
-                revoked_at=datetime.utcnow()
+                revoked_at=datetime.now(timezone.utc)
             )
         )
         
@@ -485,7 +485,7 @@ class LoginAttemptRepository:
         query = select(LoginAttempt)
         
         conditions = [
-            LoginAttempt.timestamp > datetime.utcnow() - timedelta(hours=hours)
+            LoginAttempt.timestamp > datetime.now(timezone.utc) - timedelta(hours=hours)
         ]
         
         if username:
@@ -545,7 +545,7 @@ class APIKeyRepository:
                     APIKey.is_active == True,
                     or_(
                         APIKey.expires_at.is_(None),
-                        APIKey.expires_at > datetime.utcnow()
+                        APIKey.expires_at > datetime.now(timezone.utc)
                     )
                 )
             )
@@ -578,7 +578,7 @@ class APIKeyRepository:
             update(APIKey)
             .where(APIKey.id == api_key_obj.id)
             .values(
-                last_used=datetime.utcnow(),
+                last_used=datetime.now(timezone.utc),
                 usage_count=APIKey.usage_count + 1
             )
         )

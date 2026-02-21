@@ -9,8 +9,13 @@ import {
   CircularProgress, Paper, Divider, FormControl, InputLabel,
   Select, MenuItem
 } from '@mui/material';
-import { predictFormulation, predictElution } from '../../utils/apiClient';
+import { predictFormulation, predictElution } from '../../api/mlApi';
 import { WASTE_TYPES } from '../../constants/waste';
+import { getConfidenceColor } from '../../constants/colors';
+import type { FormulationPrediction, ElutionPrediction } from '../../types/api';
+
+type PredictionResult = FormulationPrediction;
+type ElutionResult = ElutionPrediction;
 
 const METAL_FIELDS = [
   { key: 'Pb', label: '鉛 (Pb)' },
@@ -22,23 +27,6 @@ const METAL_FIELDS = [
   { key: 'F', label: 'フッ素 (F)' },
   { key: 'B', label: 'ホウ素 (B)' },
 ];
-
-interface PredictionResult {
-  recommendation: Record<string, unknown>;
-  confidence: number;
-  method: string;
-  reasoning: string[];
-  model_version?: number;
-  similar_records?: unknown[];
-}
-
-interface ElutionResult {
-  passed: boolean;
-  confidence: number;
-  method: string;
-  metal_predictions: Record<string, number>;
-  reasoning: string[];
-}
 
 const MLPredictionPanel: React.FC = () => {
   const [wasteType, setWasteType] = useState('汚泥（一般）');
@@ -235,8 +223,7 @@ const MLPredictionPanel: React.FC = () => {
             <Box className="kpi-card" sx={{ mb: 2 }}>
               <div className="kpi-card__label">予測信頼度</div>
               <div className="kpi-card__value" style={{
-                color: result.confidence >= 0.7 ? '#16A34A' :
-                       result.confidence >= 0.4 ? '#D97706' : '#DC2626',
+                color: getConfidenceColor(result.confidence),
               }}>
                 {(result.confidence * 100).toFixed(1)}
                 <span className="kpi-card__unit">%</span>

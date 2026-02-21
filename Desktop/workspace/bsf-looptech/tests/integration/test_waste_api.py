@@ -41,7 +41,7 @@ class TestHealthEndpoint:
     async def test_root_returns_message(self, client):
         response = await client.get("/")
         assert response.status_code == 200
-        assert "BSF-LoopTech" in response.json()["message"]
+        assert "ERC製品管理システム" in response.json()["message"]
 
 
 @pytest.mark.integration

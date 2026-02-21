@@ -51,6 +51,11 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
 
         try:
+            # Always pass CORS preflight requests through to CORSMiddleware
+            if request.method == "OPTIONS":
+                response = await call_next(request)
+                return response
+
             # Skip authentication for exempt paths
             if self._is_exempt_path(request.url.path):
                 response = await call_next(request)

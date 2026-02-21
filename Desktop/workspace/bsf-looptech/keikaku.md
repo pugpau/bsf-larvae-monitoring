@@ -113,16 +113,17 @@
 
 | 層 | 技術 | バージョン |
 |---|------|----------|
-| Frontend | React + MUI v5 | 18.x (JS/TSX混在) |
+| Frontend | React 18 + MUI v5 + TypeScript 100% | allowJs: false |
 | Backend | FastAPI + SQLAlchemy async | 0.100+ / 2.0 |
-| DB | PostgreSQL + pgvector | 15（16テーブル: 既存11 + ML 2 + RAG 3） |
-| Auth | JWT + API Key + RBAC | bcrypt |
+| DB | PostgreSQL + pgvector | 15（20テーブル: 既存11 + ML 2 + RAG 3 + delivery 2 + formulation 1 + activity 1） |
+| Auth | JWT (PyJWT) + API Key + RBAC | bcrypt + httpOnly cookie |
 | AI/ML | scikit-learn RF + PuLP最適化 + similarity/rule fallback | Phase 3完了 |
 | RAG/LLM | LangChain + pgvector + LM Studio | Phase 4完了 |
+| Batch | APScheduler (日次/週次/月次) | Phase 5完了 |
 | Infra | Docker Compose (Blue-Green) | 5サービス構成 (prod) |
-| Test | pytest + pytest-asyncio + Playwright | 583テスト / 80%+カバレッジ |
+| Test | pytest + pytest-asyncio + Playwright | 820テスト / 80%+カバレッジ / E2E 12 specs |
 
-### 現在のDB構造（16テーブル）
+### 現在のDB構造（20テーブル）
 
 ```
 # 認証系
@@ -140,6 +141,15 @@ ml_models, ml_predictions
 
 # Phase 4 RAG/Chat
 substrate_knowledge, chat_sessions, chat_messages
+
+# 搬入・配合ワークフロー
+incoming_materials, delivery_schedules, formulation_records
+
+# バージョン管理
+recipe_versions, recipe_version_details
+
+# 監査
+activity_logs
 ```
 
 ---
@@ -233,13 +243,60 @@ substrate_knowledge, chat_sessions, chat_messages
       ├── 分析コンポーネント移行（AnalyticsDashboard.js + CorrelationAnalysis.js → async API） ✅
       ├── storage.js 完全削除（684行 → localStorage依存ゼロ） ✅
       └── テスト追加（+17: 10 unit search/pagination + 7 integration CSV/search） ✅
-           583テスト（457 unit + 126 integration）
+
+ 2月  UX改善 CRITICAL+HIGH ★完了★ ✅
+      ├── prefers-reduced-motion 対応 ✅
+      ├── ErrorBoundary 5タブ全適用 ✅
+      ├── EmptyState + TableSkeleton 6リスト画面 ✅
+      ├── ハードコードカラー 46→0 ✅
+      ├── formatters 一元化 ✅
+      └── recharts animProps 共通化 ✅
+
+ 2月  搬入物マスター + 搬入予定分離 ★完了★ ✅
+      ├── incoming_materials + delivery_schedules 2テーブル (Alembic a7) ✅
+      ├── src/delivery/ 4ファイル + 17 APIエンドポイント ✅
+      ├── DeliveryScheduleList/Form + IncomingMaterialList TSX ✅
+      └── テスト +57件 ✅
+
+ 2月  JS→TSX 完全移行 ★完了★ ✅
+      └── 10ファイル移行 + allowJs: false 強制 ✅
+
+ 2月  レシピバージョン管理 ★完了★ ✅
+      ├── a8 migration + RecipeVersion/Detail モデル ✅
+      ├── Repository CRUD+diff + API 5エンドポイント ✅
+      ├── RecipeVersionHistory/Diff TSX ✅
+      └── テスト +42件 ✅
+
+ 2月  搬入→配合ワークフロー連携 ★完了★ ✅
+      ├── a9 migration + FormulationRecord モデル ✅
+      ├── FormulationWorkflowService + API 10エンドポイント ✅
+      ├── ML/類似度/ルール推薦 + ステータス遷移 ✅
+      ├── FormulationPanel + 3 Dialog TSX ✅
+      ├── Tab 0→Tab 1 連携 ✅
+      ├── 配合詳細ドロワー（Stepper + 溶出結果 + コスト） ✅
+      └── E2E テスト (API 5 + Playwright 7) + テスト +60件 ✅
+
+ 2月  アクティビティログ + レポート ★完了★ ✅
+      ├── a10 migration + ActivityLog モデル ✅
+      ├── src/activity/ + 通知ベル UI ✅
+      ├── レポート出力 + IntegrationOverview ✅
+      └── E2E test expansion (9 specs, 44 tests) ✅
+
+ 2月  セキュリティ強化 ★完了★ ✅
+      └── レシピAPI UUID検証, Status enum, TOCTOU修正, クロスレシピ削除防止 ✅
+
+ 2月  フロントエンド共通化 + APIクライアント分割 ★完了★ ✅
+      ├── apiClient.ts → mlApi/chatApi/kpiApi 分割 (341行削除) ✅
+      ├── statistics.ts 純粋関数抽出 ✅
+      ├── ConfirmDeleteDialog/NotificationSnackbar 共通化 ✅
+      └── JaTablePagination/DATA_CELL_SX 共通コンポーネント ✅
 
  9/30 ──────────────────── 納品期限
 
- ★★★ Phase 1〜5 + セキュリティ監査 + リファクタリング + モダナイゼーション 全て2月中に前倒し完了。★★★
+ ★★★ Phase 1〜5 + セキュリティ監査 + リファクタリング + 追加機能 全て2月中に前倒し完了。★★★
    納品期限（9/30）まで7ヶ月のバッファ。
-   583テスト（457 unit + 126 integration）。
+   820テスト（~560 unit + ~204 integration + E2E 12 specs）。
+   TypeScript 100%（allowJs: false）。
 ```
 
 ---
@@ -561,7 +618,16 @@ Phase5-4: 受入テスト ✅（2月完了）
 | ~~LOW~~ | ~~共通 useNotification フック作成（Snackbar 重複削減）~~ | **完了**（リファクタリング） |
 | ~~LOW~~ | ~~useCrudList ジェネリックフック + マスタ画面統合~~ | **完了**（リファクタリング） |
 | ~~LOW~~ | ~~localStorage脱却 + Tab 0 TSX化~~ | **完了**（搬入管理モダナイゼーション） |
-| LOW | Tab 2/3 の責務再定義（分析 vs 品質管理） | Phase 3 ダッシュボード時 |
+| ~~LOW~~ | ~~Tab 2/3 の責務再定義~~ | **完了**（IntegrationOverview + レポート出力で整理） |
 
-*最終更新: 2026-02-13*
+### 今後の残タスク
+
+| 優先度 | タスク | 期限 | 備考 |
+|--------|--------|------|------|
+| MEDIUM | ML学習データ量の現実的見積もり | 3月末 | 合成データ計画含む |
+| MEDIUM | 受入テスト仕様定義（クライアント合意） | 4月 | ユーザー操作シナリオ |
+| LOW | 本番デプロイ実施（Mac mini） | 5月〜 | Docker Compose + Blue-Green |
+| LOW | 運用開始・OJT | 6月〜 | オペレータ向けトレーニング |
+
+*最終更新: 2026-02-21*
 *作成者: Claude Code + yasu*

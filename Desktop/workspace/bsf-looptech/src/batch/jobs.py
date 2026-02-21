@@ -1,6 +1,6 @@
 """Batch job functions — daily aggregation, weekly ML retraining, monthly reports."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select, text
@@ -36,7 +36,7 @@ async def _record_job_end(
 ) -> None:
     """Update batch_job_runs record with completion info."""
     run.status = status
-    run.completed_at = datetime.utcnow()
+    run.completed_at = datetime.now(timezone.utc)
     run.result_summary = result
     run.error_message = error
     await session.commit()
@@ -51,7 +51,7 @@ async def daily_aggregation() -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         run = await _record_job_start(session, "daily_aggregation")
         try:
-            yesterday = datetime.utcnow() - timedelta(days=1)
+            yesterday = datetime.now(timezone.utc) - timedelta(days=1)
 
             # Count today's waste records
             total_result = await session.execute(
@@ -220,7 +220,7 @@ async def monthly_report() -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         run = await _record_job_start(session, "monthly_report")
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             prev_month_start = (month_start - timedelta(days=1)).replace(day=1)
 

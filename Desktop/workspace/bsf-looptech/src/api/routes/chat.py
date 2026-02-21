@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.models import User, UserRole
+from src.auth.security import SKIP_AUTH, get_current_active_user, require_role
 from src.database.postgresql import get_async_session
 from src.rag import chat_repo, knowledge_repo
 from src.rag.chain import ask_with_rag, ask_with_rag_stream
@@ -34,10 +36,11 @@ router = APIRouter(prefix="/api/v1", tags=["chat", "knowledge"])
 @router.post("/chat/sessions", response_model=ChatSessionResponse)
 async def create_chat_session(
     data: ChatSessionCreate,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Create a new chat session."""
-    chat_session = await chat_repo.create_session(session, title=data.title)
+    chat_session = await chat_repo.create_session(session, title=data.title, user_id=current_user.id)
     return ChatSessionResponse.model_validate(chat_session)
 
 
@@ -45,34 +48,43 @@ async def create_chat_session(
 async def list_chat_sessions(
     offset: int = 0,
     limit: int = 20,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """List chat sessions (newest first)."""
-    sessions = await chat_repo.list_sessions(session, offset=offset, limit=limit)
+    """List chat sessions (newest first), filtered by current user."""
+    sessions = await chat_repo.list_sessions(session, offset=offset, limit=limit, user_id=current_user.id)
     return [ChatSessionResponse.model_validate(s) for s in sessions]
 
 
 @router.get("/chat/sessions/{session_id}", response_model=ChatSessionDetailResponse)
 async def get_chat_session(
     session_id: UUID,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Get chat session with message history."""
     chat_session = await chat_repo.get_session(session, session_id)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if not SKIP_AUTH and chat_session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return ChatSessionDetailResponse.model_validate(chat_session)
 
 
 @router.delete("/chat/sessions/{session_id}")
 async def delete_chat_session(
     session_id: UUID,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Delete a chat session and all its messages."""
-    deleted = await chat_repo.delete_session(session, session_id)
-    if not deleted:
+    # Ownership check
+    chat_session = await chat_repo.get_session(session, session_id)
+    if chat_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if not SKIP_AUTH and chat_session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    await chat_repo.delete_session(session, session_id)
     return {"status": "deleted", "session_id": str(session_id)}
 
 
@@ -82,13 +94,16 @@ async def delete_chat_session(
 @router.post("/chat/ask", response_model=ChatResponse)
 async def chat_ask(
     data: ChatRequest,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Send a question and get a RAG-augmented answer."""
-    # Verify session exists
+    # Verify session exists and belongs to user
     chat_session = await chat_repo.get_session(session, data.session_id)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if not SKIP_AUTH and chat_session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Save user message
     await chat_repo.add_message(session, data.session_id, "user", data.question)
@@ -115,12 +130,15 @@ async def chat_ask(
 @router.post("/chat/ask/stream")
 async def chat_ask_stream(
     data: ChatRequest,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Send a question and get SSE streaming RAG answer."""
     chat_session = await chat_repo.get_session(session, data.session_id)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if not SKIP_AUTH and chat_session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     await chat_repo.add_message(session, data.session_id, "user", data.question)
 
@@ -139,6 +157,7 @@ async def chat_ask_stream(
 @router.post("/knowledge", response_model=KnowledgeResponse)
 async def create_knowledge_entry(
     data: KnowledgeCreate,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Add a knowledge entry to the RAG knowledge base."""
@@ -152,6 +171,7 @@ async def list_knowledge(
     q: str = "",
     offset: int = 0,
     limit: int = 20,
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """List or search knowledge entries."""
@@ -169,6 +189,7 @@ async def list_knowledge(
 
 @router.post("/knowledge/seed")
 async def seed_knowledge_base(
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Seed initial BSF domain knowledge into the knowledge base."""
@@ -179,6 +200,7 @@ async def seed_knowledge_base(
 @router.post("/knowledge/import-csv")
 async def import_knowledge_csv(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Bulk import knowledge entries from CSV.

@@ -193,7 +193,7 @@ class TestDevUser:
         from src.auth.security import _create_dev_user
         user = _create_dev_user()
         assert user.username == "dev_user"
-        assert user.email == "dev@localhost"
+        assert user.email == "dev@example.com"
         assert user.is_active is True
         assert user.is_superuser is True
         assert user.is_verified is True

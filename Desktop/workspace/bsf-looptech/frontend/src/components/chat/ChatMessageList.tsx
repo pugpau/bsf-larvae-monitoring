@@ -9,22 +9,25 @@ import {
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import type { ChatMessage } from '../../types/api';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
   loading?: boolean;
 }
 
-const TypingIndicator: React.FC = () => (
+const TypingIndicator: React.FC<{ prefersReduced: boolean }> = ({ prefersReduced }) => (
   <Box
     sx={{
       display: 'flex',
       gap: 0.5,
       p: 1.5,
-      '@keyframes blink': {
-        '0%, 80%, 100%': { opacity: 0.3 },
-        '40%': { opacity: 1 },
-      },
+      ...(!prefersReduced && {
+        '@keyframes blink': {
+          '0%, 80%, 100%': { opacity: 0.3 },
+          '40%': { opacity: 1 },
+        },
+      }),
     }}
   >
     {[0, 1, 2].map((i) => (
@@ -35,8 +38,12 @@ const TypingIndicator: React.FC = () => (
           height: 8,
           borderRadius: '50%',
           backgroundColor: 'grey.400',
-          animation: 'blink 1.4s infinite',
-          animationDelay: `${i * 0.2}s`,
+          ...(prefersReduced
+            ? { opacity: 0.6 }
+            : {
+                animation: 'blink 1.4s infinite',
+                animationDelay: `${i * 0.2}s`,
+              }),
         }}
       />
     ))}
@@ -162,6 +169,7 @@ const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
 
 const ChatMessageList: React.FC<ChatMessageListProps> = ({ messages, loading = false }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const prefersReduced = useReducedMotion();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -191,7 +199,7 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ messages, loading = f
             AI
           </Typography>
           <Typography variant="body2">
-            BSF飼育・配合に関する質問をどうぞ
+            廃棄物処理・配合に関する質問をどうぞ
           </Typography>
         </Box>
       )}
@@ -208,7 +216,7 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ messages, loading = f
               backgroundColor: 'grey.100',
             }}
           >
-            <TypingIndicator />
+            <TypingIndicator prefersReduced={prefersReduced} />
           </Box>
         </Box>
       )}

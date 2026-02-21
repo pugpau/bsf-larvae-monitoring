@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.models import User, UserRole
+from src.auth.security import require_role
 from src.batch.jobs import JOB_REGISTRY
 from src.batch.scheduler import get_scheduler_status
 from src.batch.schemas import (
@@ -94,9 +96,10 @@ async def get_job_run(
 @router.post("/trigger/{job_name}", response_model=BatchTriggerResponse)
 async def trigger_job(
     job_name: str,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Manually trigger a batch job by name."""
+    """Manually trigger a batch job by name. Admin only."""
     if job_name not in JOB_REGISTRY:
         raise HTTPException(
             status_code=404,

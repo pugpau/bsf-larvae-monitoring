@@ -11,7 +11,8 @@ import {
 } from '@mui/material';
 import {
   fetchAccuracy, fetchMLModels, triggerTraining
-} from '../../utils/apiClient';
+} from '../../api/mlApi';
+import { PALETTE } from '../../constants/colors';
 
 interface AccuracyData {
   total_predictions: number;
@@ -157,7 +158,7 @@ const PredictionAccuracy: React.FC = () => {
             <Box className="kpi-card">
               <div className="kpi-card__label">ML予測率</div>
               <div className="kpi-card__value" style={{
-                color: accuracy.ml_ratio >= 0.5 ? '#16A34A' : '#D97706',
+                color: accuracy.ml_ratio >= 0.5 ? PALETTE.success.main : PALETTE.warning.main,
               }}>
                 {(accuracy.ml_ratio * 100).toFixed(1)}
                 <span className="kpi-card__unit">%</span>
@@ -177,8 +178,8 @@ const PredictionAccuracy: React.FC = () => {
             <Box className="kpi-card">
               <div className="kpi-card__label">検証精度</div>
               <div className="kpi-card__value" style={{
-                color: accuracy.accuracy >= 0.8 ? '#16A34A' :
-                       accuracy.accuracy >= 0.5 ? '#D97706' : '#DC2626',
+                color: accuracy.accuracy >= 0.8 ? PALETTE.success.main :
+                       accuracy.accuracy >= 0.5 ? PALETTE.warning.main : PALETTE.error.main,
               }}>
                 {accuracy.verified_count > 0
                   ? `${(accuracy.accuracy * 100).toFixed(1)}`

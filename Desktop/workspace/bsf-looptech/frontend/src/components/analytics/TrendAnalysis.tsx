@@ -13,38 +13,15 @@ import {
   Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
   BarChart, Bar
 } from 'recharts';
-import { fetchTrends } from '../../utils/apiClient';
-
-const CHART_COLORS = {
-  primary: '#1E40AF',
-  secondary: '#3B82F6',
-  success: '#16A34A',
-  warning: '#D97706',
-  error: '#DC2626',
-  info: '#0284C7',
-};
-
-interface TrendData {
-  monthly_predictions?: Array<{
-    month: string;
-    total: number;
-    ml: number;
-    similarity: number;
-    rule: number;
-  }>;
-  monthly_accuracy?: Array<{
-    month: string;
-    accuracy: number;
-    total: number;
-  }>;
-  monthly_waste?: Array<{
-    month: string;
-    records: number;
-    formulated: number;
-  }>;
-}
+import { fetchTrends } from '../../api/mlApi';
+import { CHART_COLORS, GRID_STROKE } from '../../constants/colors';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { getAnimationProps } from '../../utils/recharts';
+import type { TrendData } from '../../types/api';
 
 const TrendAnalysis: React.FC = () => {
+  const prefersReduced = useReducedMotion();
+  const animProps = getAnimationProps(prefersReduced);
   const [months, setMonths] = useState(6);
   const [data, setData] = useState<TrendData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,14 +92,14 @@ const TrendAnalysis: React.FC = () => {
               </Typography>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={data!.monthly_predictions} margin={{ top: 10, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontFamily: "'Fira Code', monospace", fontSize: 11 }} allowDecimals={false} />
                   <RechartsTooltip />
                   <Legend />
-                  <Bar dataKey="ml" name="ML" fill={CHART_COLORS.primary} stackId="a" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="similarity" name="類似" fill={CHART_COLORS.info} stackId="a" />
-                  <Bar dataKey="rule" name="ルール" fill={CHART_COLORS.warning} stackId="a" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="ml" name="ML" fill={CHART_COLORS.primary} stackId="a" radius={[0, 0, 0, 0]} {...animProps} />
+                  <Bar dataKey="similarity" name="類似" fill={CHART_COLORS.info} stackId="a" {...animProps} />
+                  <Bar dataKey="rule" name="ルール" fill={CHART_COLORS.warning} stackId="a" radius={[4, 4, 0, 0]} {...animProps} />
                 </BarChart>
               </ResponsiveContainer>
             </Box>
@@ -138,7 +115,7 @@ const TrendAnalysis: React.FC = () => {
               </Typography>
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={data!.monthly_accuracy} margin={{ top: 10, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis
                     domain={[0, 100]}
@@ -150,6 +127,7 @@ const TrendAnalysis: React.FC = () => {
                     type="monotone" dataKey="accuracy" name="精度"
                     stroke={CHART_COLORS.primary} strokeWidth={2}
                     dot={{ r: 4 }} activeDot={{ r: 6 }}
+                    {...animProps}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -166,13 +144,13 @@ const TrendAnalysis: React.FC = () => {
               </Typography>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={data!.monthly_waste} margin={{ top: 10, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontFamily: "'Fira Code', monospace", fontSize: 11 }} allowDecimals={false} />
                   <RechartsTooltip />
                   <Legend />
-                  <Bar dataKey="records" name="搬入" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="formulated" name="配合済" fill={CHART_COLORS.success} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="records" name="搬入" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} {...animProps} />
+                  <Bar dataKey="formulated" name="配合済" fill={CHART_COLORS.success} radius={[4, 4, 0, 0]} {...animProps} />
                 </BarChart>
               </ResponsiveContainer>
             </Box>

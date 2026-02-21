@@ -4,7 +4,7 @@ Handles business logic for authentication and user management.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
@@ -57,7 +57,10 @@ class AuthenticationService:
                 user = await self.user_repo.get_user_by_email(username)
             
             # Check account lockout
-            if user and user.locked_until and user.locked_until > datetime.utcnow():
+            locked_until = user.locked_until if user else None
+            if locked_until and locked_until.tzinfo is None:
+                locked_until = locked_until.replace(tzinfo=timezone.utc)
+            if user and locked_until and locked_until > datetime.now(timezone.utc):
                 await self.login_repo.log_login_attempt(
                     username=username,
                     success=False,

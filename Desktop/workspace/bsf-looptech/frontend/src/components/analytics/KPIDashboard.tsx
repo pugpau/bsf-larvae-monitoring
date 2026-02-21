@@ -16,61 +16,24 @@ import {
 } from 'recharts';
 import {
   fetchKPIRealtime, fetchKPITrends, fetchKPIAlerts,
-} from '../../utils/apiClient';
-
-interface KPIMetric {
-  label: string;
-  value: number;
-  unit: string;
-  trend: number | null;
-  status: 'normal' | 'warning' | 'critical';
-}
-
-interface KPIRealtimeData {
-  period_days: number;
-  processing_volume: KPIMetric;
-  formulation_success_rate: KPIMetric;
-  material_cost: KPIMetric;
-  ml_usage_rate: KPIMetric;
-  avg_processing_time: KPIMetric;
-  violation_rate: KPIMetric;
-  updated_at: string;
-}
-
-interface KPITrendPoint {
-  period: string;
-  processing_volume: number;
-  success_rate: number;
-  material_cost: number;
-  ml_usage_rate: number;
-  avg_processing_time_hours: number;
-  violation_rate: number;
-}
-
-interface KPIAlertItem {
-  severity: 'warning' | 'critical';
-  metric: string;
-  message: string;
-  value: number;
-  threshold: number;
-  record_id?: string;
-  created_at: string;
-}
+} from '../../api/kpiApi';
+import { CHART_COLORS, getKPIStatusColor } from '../../constants/colors';
+import { formatKPIValue } from '../../utils/formatters';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { getAnimationProps } from '../../utils/recharts';
+import type { KPIMetric, KPIRealtimeData, KPITrendPoint, KPIAlert as KPIAlertItem } from '../../types/api';
 
 // KPIs where "up" is bad (reverse trend color)
 const INVERSE_TREND_METRICS = new Set([
   'violation_rate', 'material_cost', 'avg_processing_time',
 ]);
 
-const CHART_COLORS = {
-  processing_volume: '#1E40AF',
-  success_rate: '#16A34A',
-};
-
 const POLLING_INTERVAL = 30_000; // 30 seconds
 const MAX_VISIBLE_ALERTS = 3;
 
 const KPIDashboard: React.FC = () => {
+  const prefersReduced = useReducedMotion();
+  const animProps = getAnimationProps(prefersReduced);
   const [days, setDays] = useState(7);
   const [realtime, setRealtime] = useState<KPIRealtimeData | null>(null);
   const [trends, setTrends] = useState<KPITrendPoint[]>([]);
@@ -151,24 +114,11 @@ const KPIDashboard: React.FC = () => {
     );
   };
 
-  const formatValue = (metric: KPIMetric): string => {
-    if (metric.unit === '%') {
-      return metric.value.toFixed(1);
-    }
-    if (metric.unit === '円') {
-      return metric.value.toLocaleString();
-    }
-    if (metric.unit === '時間') {
-      return metric.value.toFixed(1);
-    }
-    return String(metric.value);
-  };
+  const formatValue = (metric: KPIMetric): string =>
+    formatKPIValue(metric.value, metric.unit);
 
-  const getValueColor = (metric: KPIMetric): string | undefined => {
-    if (metric.status === 'critical') return '#DC2626';
-    if (metric.status === 'warning') return '#D97706';
-    return undefined;
-  };
+  const getValueColor = (metric: KPIMetric): string | undefined =>
+    getKPIStatusColor(metric.status);
 
   const renderKPICard = (metric: KPIMetric, metricKey: string) => (
     <Box className="kpi-card">
@@ -283,6 +233,7 @@ const KPIDashboard: React.FC = () => {
                 name="処理量"
                 strokeWidth={2}
                 dot={{ r: 3 }}
+                {...animProps}
               />
               <Line
                 yAxisId="right"
@@ -292,6 +243,7 @@ const KPIDashboard: React.FC = () => {
                 name="成功率(%)"
                 strokeWidth={2}
                 dot={{ r: 3 }}
+                {...animProps}
               />
             </LineChart>
           </ResponsiveContainer>

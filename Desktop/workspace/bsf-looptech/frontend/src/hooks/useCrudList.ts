@@ -40,6 +40,7 @@ interface UseCrudListReturn<T, F extends Record<string, string>> {
   handleDeleteConfirm: () => void;
   handleDeleteCancel: () => void;
   handleFieldChange: (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleFieldSet: (field: string, value: string) => void;
   setFormOpen: (open: boolean) => void;
 }
 
@@ -183,6 +184,10 @@ export function useCrudList<T extends { id: string }, F extends Record<string, s
     setForm(prev => ({ ...prev, [field]: e.target.value }));
   }, []);
 
+  const handleFieldSet = useCallback((field: string, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  }, []);
+
   return {
     items, total, loading, searchQuery, page, rowsPerPage,
     formOpen, editId, form, deleteTarget, deleteDialogOpen,
@@ -190,6 +195,6 @@ export function useCrudList<T extends { id: string }, F extends Record<string, s
     load, handleSearchChange, handlePageChange, handleRowsPerPageChange,
     handleExport, handleImport, handleOpenNew, handleOpenEdit, handleSave,
     handleDeleteClick, handleDeleteConfirm, handleDeleteCancel,
-    handleFieldChange, setFormOpen,
+    handleFieldChange, handleFieldSet, setFormOpen,
   };
 }

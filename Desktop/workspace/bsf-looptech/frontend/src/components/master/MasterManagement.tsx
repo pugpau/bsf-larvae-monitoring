@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Tabs, Tab } from '@mui/material';
 import SupplierList from './SupplierList';
+import IncomingMaterialList from './IncomingMaterialList';
 import SolidificationMaterialList from './SolidificationMaterialList';
 import LeachingSuppressantList from './LeachingSuppressantList';
 
@@ -37,6 +38,7 @@ const MasterManagement: React.FC = () => {
         }}
       >
         <Tab label="搬入先" />
+        <Tab label="搬入物" />
         <Tab label="固化材" />
         <Tab label="溶出抑制剤" />
       </Tabs>
@@ -45,9 +47,12 @@ const MasterManagement: React.FC = () => {
         <SupplierList />
       </TabPanel>
       <TabPanel value={subTab} index={1}>
-        <SolidificationMaterialList />
+        <IncomingMaterialList />
       </TabPanel>
       <TabPanel value={subTab} index={2}>
+        <SolidificationMaterialList />
+      </TabPanel>
+      <TabPanel value={subTab} index={3}>
         <LeachingSuppressantList />
       </TabPanel>
     </Box>

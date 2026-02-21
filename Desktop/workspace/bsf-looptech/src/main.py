@@ -1,5 +1,5 @@
 """
-BSF-LoopTech — 廃棄物処理配合最適化システム API
+ERC製品管理システム — 廃棄物処理配合最適化 API
 """
 
 from contextlib import asynccontextmanager
@@ -12,9 +12,13 @@ import httpx
 import uvicorn
 
 from src.api.routes import auth, waste
+from src.api.routes.activity import router as activity_router
 from src.api.routes.batch import router as batch_router
+from src.api.routes.dashboard import router as dashboard_router
 from src.api.routes.kpi import router as kpi_router
 from src.api.routes.chat import router as chat_router
+from src.api.routes.delivery import router as delivery_router
+from src.api.routes.formulation import router as formulation_router
 from src.api.routes.materials import router as materials_router
 from src.api.routes.ml import router as ml_router
 from src.api.routes.optimization import router as optimization_router
@@ -30,7 +34,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
-    logger.info("Starting BSF-LoopTech API")
+    logger.info("Starting ERC製品管理システム API")
 
     # Safety guard: refuse to start with SKIP_AUTH in production
     if settings.ENVIRONMENT == "production" and os.getenv("SKIP_AUTH", "false").lower() == "true":
@@ -68,7 +72,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Batch scheduler shutdown error: {e}")
 
-    logger.info("Shutting down BSF-LoopTech API")
+    logger.info("Shutting down ERC製品管理システム API")
     try:
         from src.database.postgresql import close_database
 
@@ -81,7 +85,7 @@ async def lifespan(app: FastAPI):
 _is_production = settings.ENVIRONMENT == "production"
 
 app = FastAPI(
-    title="BSF-LoopTech API",
+    title="ERC製品管理システム API",
     description="廃棄物処理配合最適化システム — Waste treatment formulation optimisation API",
     version="2.0.0",
     lifespan=lifespan,
@@ -119,13 +123,17 @@ app.include_router(materials_router)
 app.include_router(ml_router)
 app.include_router(optimization_router)
 app.include_router(chat_router)
+app.include_router(delivery_router)
+app.include_router(formulation_router)
 app.include_router(batch_router)
 app.include_router(kpi_router)
+app.include_router(activity_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")
 async def read_root():
-    return {"message": "BSF-LoopTech — 廃棄物処理配合最適化システム"}
+    return {"message": "ERC製品管理システム — 廃棄物処理配合最適化"}
 
 
 @app.get("/favicon.ico")

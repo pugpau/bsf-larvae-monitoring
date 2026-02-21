@@ -6,6 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.models import User, UserRole
+from src.auth.security import get_current_active_user, require_role
 from src.database.postgresql import get_async_session
 from src.ml.schemas import (
     PredictionRequest,
@@ -41,7 +43,7 @@ async def predict_formulation(
 
     # Fetch history for similarity fallback
     repo = WasteRepository(session)
-    history = await repo.get_all(limit=500)
+    history, _total = await repo.get_all(limit=500)
 
     result = await predictor.predict(
         analysis=data.analysis,
@@ -82,9 +84,10 @@ async def list_models(
 @router.post("/ml/train", response_model=TrainingReport)
 async def trigger_training(
     config: Optional[TrainingConfig] = None,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Trigger model retraining. Returns training report."""
+    """Trigger model retraining. Returns training report. Admin only."""
     cfg = config or TrainingConfig()
 
     # 1. Extract real data
@@ -179,9 +182,10 @@ async def trigger_training(
 @router.put("/ml/models/{model_id}/activate")
 async def activate_model(
     model_id: str,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Activate a specific model version."""
+    """Activate a specific model version. Admin only."""
     registry = ModelRegistry(session)
     success = await registry.activate_model(model_id)
     if not success:

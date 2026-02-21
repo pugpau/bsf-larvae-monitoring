@@ -28,7 +28,7 @@ import {
   fetchChatSession,
   deleteChatSession,
   askChat,
-} from '../../utils/apiClient';
+} from '../../api/chatApi';
 import ChatMessageList from './ChatMessageList';
 import ChatInput from './ChatInput';
 

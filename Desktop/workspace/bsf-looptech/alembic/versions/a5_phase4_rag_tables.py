@@ -28,7 +28,14 @@ def upgrade() -> None:
     )
     op.create_index("ix_substrate_knowledge_title", "substrate_knowledge", ["title"])
     # Add vector column via raw SQL (pgvector extension required)
-    op.execute("ALTER TABLE substrate_knowledge ADD COLUMN embedding vector(768)")
+    conn = op.get_bind()
+    try:
+        conn.execute(sa.text("SAVEPOINT vector_col"))
+        conn.execute(sa.text("ALTER TABLE substrate_knowledge ADD COLUMN embedding vector(768)"))
+        conn.execute(sa.text("RELEASE SAVEPOINT vector_col"))
+    except Exception:
+        conn.execute(sa.text("ROLLBACK TO SAVEPOINT vector_col"))
+        # pgvector not installed — skip embedding column (dev environment)
 
     op.create_table(
         "chat_sessions",

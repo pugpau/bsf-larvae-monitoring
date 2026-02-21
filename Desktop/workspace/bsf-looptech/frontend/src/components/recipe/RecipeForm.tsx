@@ -33,6 +33,7 @@ const EMPTY_FORM = {
   target_strength: '',
   status: 'draft',
   notes: '',
+  change_summary: '',
 };
 
 const EMPTY_DETAIL = {
@@ -58,6 +59,7 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ open, recipe, onClose }) => {
         target_strength: recipe.target_strength?.toString() || '',
         status: recipe.status,
         notes: recipe.notes || '',
+        change_summary: '',
       });
       setCurrentRecipe(recipe);
     } else {
@@ -92,19 +94,23 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ open, recipe, onClose }) => {
 
   const handleSave = async () => {
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         name: form.name,
         waste_type: form.waste_type,
         target_strength: form.target_strength ? parseFloat(form.target_strength) : undefined,
         status: form.status as Recipe['status'],
         notes: form.notes || undefined,
       };
+      if (currentRecipe && form.change_summary) {
+        payload.change_summary = form.change_summary;
+      }
 
       if (currentRecipe) {
         await updateRecipe(currentRecipe.id, payload);
+        setForm(prev => ({ ...prev, change_summary: '' }));
         setSnackbar({ open: true, message: '更新しました', severity: 'success' });
       } else {
-        const created = await createRecipe(payload);
+        const created = await createRecipe(payload as Parameters<typeof createRecipe>[0]);
         setCurrentRecipe(created);
         setSnackbar({ open: true, message: '登録しました', severity: 'success' });
       }
@@ -211,6 +217,17 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ open, recipe, onClose }) => {
                 size="small"
               />
             </Stack>
+
+            {currentRecipe && (
+              <TextField
+                label="変更理由 (任意)"
+                value={form.change_summary}
+                onChange={handleFieldChange('change_summary')}
+                fullWidth
+                size="small"
+                placeholder="例: 添加率を見直し"
+              />
+            )}
 
             <Button
               onClick={handleSave}

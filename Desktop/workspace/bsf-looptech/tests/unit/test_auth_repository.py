@@ -4,7 +4,7 @@ Tests UserRepository, SessionRepository, LoginAttemptRepository, APIKeyRepositor
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -443,7 +443,7 @@ class TestSessionRepository:
             session_token="tok-expired",
             ip_address="10.0.0.1",
             user_agent="Agent",
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
             is_active=True,
         )
         async_session.add(expired_sess)

@@ -1,7 +1,7 @@
 """KPI service — computes realtime metrics, trends, and alerts from existing tables."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import func, select
@@ -41,7 +41,7 @@ class KPIService:
 
     async def get_realtime(self, days: int = 7) -> dict[str, Any]:
         """Compute all 6 KPIs for the given period with trend from previous period."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         period_start = now - timedelta(days=days)
         prev_start = period_start - timedelta(days=days)
 
@@ -128,7 +128,7 @@ class KPIService:
 
     async def get_trends(self, months: int = 6) -> dict[str, Any]:
         """Compute monthly KPI trends."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         data = []
 
         for i in range(months - 1, -1, -1):
@@ -155,7 +155,7 @@ class KPIService:
 
     async def get_alerts(self, days: int = 7) -> dict[str, Any]:
         """Get active KPI alerts — elution violations and metric warnings."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         period_start = now - timedelta(days=days)
         alerts: list[dict] = []
 

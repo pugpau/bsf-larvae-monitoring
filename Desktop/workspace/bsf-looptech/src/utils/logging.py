@@ -6,7 +6,7 @@ Provides structured logging with context and error tracking.
 import logging
 import sys
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
@@ -30,7 +30,7 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format log record with structured data."""
         log_data = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -107,11 +107,11 @@ def log_execution_time(func_name: Optional[str] = None):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             logger = get_logger(func.__module__)
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
             
             try:
                 result = await func(*args, **kwargs)
-                end_time = datetime.utcnow()
+                end_time = datetime.now(timezone.utc)
                 duration = (end_time - start_time).total_seconds()
                 
                 logger.info(
@@ -121,7 +121,7 @@ def log_execution_time(func_name: Optional[str] = None):
                 return result
                 
             except Exception as e:
-                end_time = datetime.utcnow()
+                end_time = datetime.now(timezone.utc)
                 duration = (end_time - start_time).total_seconds()
                 
                 logger.error(
@@ -134,11 +134,11 @@ def log_execution_time(func_name: Optional[str] = None):
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
             logger = get_logger(func.__module__)
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
             
             try:
                 result = func(*args, **kwargs)
-                end_time = datetime.utcnow()
+                end_time = datetime.now(timezone.utc)
                 duration = (end_time - start_time).total_seconds()
                 
                 logger.info(
@@ -148,7 +148,7 @@ def log_execution_time(func_name: Optional[str] = None):
                 return result
                 
             except Exception as e:
-                end_time = datetime.utcnow()
+                end_time = datetime.now(timezone.utc)
                 duration = (end_time - start_time).total_seconds()
                 
                 logger.error(
@@ -166,7 +166,7 @@ def log_execution_time(func_name: Optional[str] = None):
 @contextmanager
 def log_context(logger: logging.Logger, operation: str, **context):
     """Context manager for logging operations with additional context."""
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
     
     # Add context to all log records in this block
     old_factory = logging.getLogRecordFactory()
@@ -183,7 +183,7 @@ def log_context(logger: logging.Logger, operation: str, **context):
         logger.info(f"Starting {operation}", extra=context)
         yield
         
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
         logger.info(
             f"Completed {operation}",
@@ -191,7 +191,7 @@ def log_context(logger: logging.Logger, operation: str, **context):
         )
         
     except Exception as e:
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
         
         logger.error(

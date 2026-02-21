@@ -12,7 +12,7 @@ test.describe('AIチャット / RAG', () => {
     await page.getByLabel(/ユーザー名/).fill('demo');
     await page.getByLabel(/パスワード/).fill('demo');
     await page.getByRole('button', { name: /ログイン/ }).click();
-    await expect(page.getByText('BSF-LoopTech')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('ERC製品管理システム')).toBeVisible({ timeout: 10000 });
   });
 
   test('チャットFABボタンが表示される', async ({ page }) => {

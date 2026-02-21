@@ -3,7 +3,7 @@ Repository for waste treatment records and material types.
 Handles all database operations via SQLAlchemy async sessions.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import func, or_, select, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -124,6 +124,7 @@ class WasteRepository:
                 stmt = stmt.where(WasteRecord.waste_type == waste_type)
             if source:
                 stmt = stmt.where(WasteRecord.source == source)
+            stmt = stmt.limit(50000)
             result = await self.session.execute(stmt)
             return [self._to_dict(r) for r in result.scalars().all()]
         except Exception as e:
@@ -167,7 +168,7 @@ class WasteRepository:
             if "notes" in data:
                 values["notes"] = data["notes"]
 
-            values["updated_at"] = datetime.utcnow()
+            values["updated_at"] = datetime.now(timezone.utc)
 
             await self.session.execute(
                 update(WasteRecord).where(WasteRecord.id == record_id).values(**values)
@@ -283,7 +284,7 @@ class MaterialTypeRepository:
             if "attributes" in data:
                 values["attributes"] = data["attributes"]
 
-            values["updated_at"] = datetime.utcnow()
+            values["updated_at"] = datetime.now(timezone.utc)
 
             await self.session.execute(
                 update(MaterialType).where(MaterialType.id == type_id).values(**values)

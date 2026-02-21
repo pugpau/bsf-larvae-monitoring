@@ -1,6 +1,7 @@
-/* BSF-LoopTech Design System */
+/* ERC リサイクルシステム Design System */
 @import './styles/theme-colors.css';
 @import './styles/ocean-theme.css';
+@import './styles/reduced-motion.css';
 
 /* Global styles */
 body {
