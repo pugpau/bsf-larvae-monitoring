@@ -1,0 +1,49 @@
+/**
+ * prefers-reduced-motion 対応
+ * アクセシビリティ: 視差効果を減らす設定が有効な場合、全アニメーションを無効化
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* MUI Collapse */
+  .MuiCollapse-root {
+    transition: none !important;
+  }
+
+  /* MUI Fab */
+  .MuiFab-root {
+    transition: none !important;
+  }
+
+  /* MUI Drawer */
+  .MuiDrawer-paper {
+    transition: none !important;
+  }
+
+  /* MUI Tab indicator */
+  .MuiTabs-indicator {
+    transition: none !important;
+  }
+
+  /* MUI Button ripple */
+  .MuiButtonBase-root .MuiTouchRipple-root {
+    display: none !important;
+  }
+
+  /* Spinner */
+  .spinner,
+  .animate-spin {
+    animation: none !important;
+  }
+
+  .animate-pulse {
+    animation: none !important;
+  }
+}

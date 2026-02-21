@@ -1,0 +1,11 @@
+# テスト用依存関係
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+aiosqlite>=0.19.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+httpx>=0.24.0
+fakeredis>=2.20.0
+
+# オプション（パフォーマンス向上）
+pytest-xdist>=3.0.0  # 並列テスト実行

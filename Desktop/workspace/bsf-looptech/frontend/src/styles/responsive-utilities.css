@@ -1,0 +1,274 @@
+/* Responsive utilities for 16:10 aspect ratio displays */
+
+/* Base responsive breakpoints with 16:10 consideration */
+:root {
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+}
+
+/* 16:10 aspect ratio specific variables */
+@media (min-aspect-ratio: 16/10) {
+  :root {
+    --spacing-md: 20px;
+    --spacing-lg: 28px;
+    --spacing-xl: 40px;
+    --spacing-xxl: 56px;
+  }
+}
+
+/* Typography scaling for 16:10 displays */
+@media (min-aspect-ratio: 16/10) and (min-width: 1400px) {
+  /* Increase base font size for better readability */
+  html {
+    font-size: 17px;
+  }
+  
+  /* Scale up headings */
+  h1 { font-size: 2.5rem; }
+  h2 { font-size: 2rem; }
+  h3 { font-size: 1.75rem; }
+  h4 { font-size: 1.5rem; }
+  h5 { font-size: 1.25rem; }
+  h6 { font-size: 1.1rem; }
+  
+  /* Ensure proper line height */
+  p, li, td, th {
+    line-height: 1.6;
+  }
+}
+
+/* Container width utilities for 16:10 */
+@media (min-aspect-ratio: 16/10) {
+  .container-16-10 {
+    width: 100%;
+    max-width: 1920px;
+    margin: 0 auto;
+    padding-left: var(--spacing-xl);
+    padding-right: var(--spacing-xl);
+  }
+}
+
+/* Grid system enhancements for 16:10 */
+@media (min-aspect-ratio: 16/10) and (min-width: 1400px) {
+  /* MUI Grid adjustments */
+  .MuiGrid-container {
+    margin-left: calc(var(--spacing-md) * -1);
+    margin-right: calc(var(--spacing-md) * -1);
+  }
+  
+  .MuiGrid-item {
+    padding-left: var(--spacing-md);
+    padding-right: var(--spacing-md);
+  }
+  
+  /* Bootstrap Grid adjustments */
+  .row {
+    margin-left: calc(var(--spacing-md) * -1);
+    margin-right: calc(var(--spacing-md) * -1);
+  }
+  
+  .col, [class*="col-"] {
+    padding-left: var(--spacing-md);
+    padding-right: var(--spacing-md);
+  }
+}
+
+/* Card components optimization */
+@media (min-aspect-ratio: 16/10) {
+  /* MUI Cards */
+  .MuiCard-root {
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .MuiCardContent-root {
+    padding: var(--spacing-lg);
+  }
+  
+  /* Bootstrap Cards */
+  .card {
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .card-body {
+    padding: var(--spacing-lg);
+  }
+}
+
+/* Table responsiveness for 16:10 */
+@media (min-aspect-ratio: 16/10) {
+  /* Prevent text truncation in tables */
+  table {
+    table-layout: auto;
+  }
+  
+  th, td {
+    white-space: normal;
+    word-break: break-word;
+    padding: var(--spacing-md);
+  }
+  
+  /* Specific adjustments for data-heavy tables */
+  .data-table th,
+  .data-table td {
+    min-width: 120px;
+  }
+}
+
+/* Chart container optimizations */
+@media (min-aspect-ratio: 16/10) {
+  .chart-wrapper {
+    min-height: 400px;
+    height: 55vh;
+    max-height: 700px;
+  }
+  
+  /* Recharts specific */
+  .recharts-wrapper {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  
+  .recharts-surface {
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+
+/* Modal and dialog adjustments */
+@media (min-aspect-ratio: 16/10) and (min-width: 1400px) {
+  /* MUI Dialogs */
+  .MuiDialog-paperWidthSm {
+    max-width: 700px;
+  }
+  
+  .MuiDialog-paperWidthMd {
+    max-width: 1000px;
+  }
+  
+  .MuiDialog-paperWidthLg {
+    max-width: 1400px;
+  }
+  
+  /* Bootstrap Modals */
+  .modal-dialog {
+    max-width: 700px;
+  }
+  
+  .modal-lg {
+    max-width: 1000px;
+  }
+  
+  .modal-xl {
+    max-width: 1400px;
+  }
+}
+
+/* Form elements spacing */
+@media (min-aspect-ratio: 16/10) {
+  /* MUI Form Controls */
+  .MuiFormControl-root {
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .MuiTextField-root {
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  /* Bootstrap Forms */
+  .form-group {
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .form-control {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+}
+
+/* Navigation enhancements */
+@media (min-aspect-ratio: 16/10) {
+  /* Tab navigation */
+  .MuiTabs-root {
+    margin-bottom: var(--spacing-xl);
+  }
+  
+  .MuiTab-root {
+    min-width: 140px;
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+  
+  /* Ensure tabs don't get cut off */
+  .MuiTabs-scroller {
+    overflow-x: auto !important;
+  }
+}
+
+/* Utility classes for 16:10 displays */
+@media (min-aspect-ratio: 16/10) {
+  .hide-on-16-10 {
+    display: none !important;
+  }
+  
+  .show-on-16-10 {
+    display: block !important;
+  }
+  
+  .expand-on-16-10 {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  
+  .text-no-truncate {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: initial !important;
+  }
+}
+
+/* Scrollbar styling for better visibility */
+@media (min-aspect-ratio: 16/10) {
+  /* Webkit browsers */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 6px;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 6px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+  
+  /* Firefox */
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: #888 #f1f1f1;
+  }
+}
+
+/* Print styles for 16:10 */
+@media print and (min-aspect-ratio: 16/10) {
+  @page {
+    size: landscape;
+    margin: 1cm;
+  }
+  
+  body {
+    font-size: 12pt;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}

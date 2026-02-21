@@ -1,0 +1,141 @@
+/* ERC リサイクルシステム Design System */
+@import './styles/theme-colors.css';
+@import './styles/ocean-theme.css';
+@import './styles/reduced-motion.css';
+
+/* Global styles */
+body {
+  margin: 0;
+  font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  background-color: var(--color-background-default);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+code {
+  font-family: 'Fira Code', source-code-pro, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Loading spinner */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: var(--color-background-default);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-neutral-200);
+  border-top: 3px solid var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-container p {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-family: 'Fira Sans', sans-serif;
+}
+
+/* Access denied */
+.access-denied {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: var(--color-background-default);
+  text-align: center;
+}
+
+.access-denied h2 {
+  color: var(--color-error-main);
+  font-family: 'Fira Sans', sans-serif;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.access-denied p {
+  color: var(--color-text-secondary);
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+
+.access-denied button {
+  background-color: var(--color-primary);
+  color: #FFFFFF;
+  border: none;
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: 'Fira Sans', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 200ms ease;
+}
+
+.access-denied button:hover {
+  background-color: #1E3A8A;
+}
+
+/* Pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* MUI overrides for wider screens */
+@media (min-width: 1440px) {
+  .MuiContainer-root {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+/* Table responsiveness */
+.MuiTableContainer-root {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.MuiTable-root {
+  min-width: 100%;
+}
+
+/* Tab scroll buttons always visible */
+.MuiTabs-scrollButtons {
+  display: flex !important;
+}
+
+/* Overflow handling */
+.MuiBox-root,
+.MuiCard-root,
+.MuiCardContent-root {
+  overflow: visible;
+}

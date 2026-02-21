@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bsf-looptech"
+version = "2.0.0"
+description = "BSF-LoopTech — 廃棄物処理配合最適化システム"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]",
+    "python-dotenv",
+    "numpy",
+    "sqlalchemy>=2.0.0",
+    "asyncpg",
+    "alembic",
+    "psycopg2-binary",
+    "PyJWT>=2.8.0",
+    "passlib[bcrypt]",
+    "pydantic[email]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pylint.messages_control]
+disable = ["C0114", "C0115", "C0116"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"

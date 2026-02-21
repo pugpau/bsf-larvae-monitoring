@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg14
+    container_name: bsf-postgres
+    environment:
+      POSTGRES_DB: bsf_system
+      POSTGRES_USER: bsf_user
+      POSTGRES_PASSWORD: bsf_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - bsf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bsf_user -d bsf_system"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: bsf-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bsf_user:bsf_password@postgres:5432/bsf_system
+      LOG_LEVEL: INFO
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3005,http://localhost:5173
+      SKIP_AUTH: ${SKIP_AUTH:-false}
+      LLM_BASE_URL: http://host.docker.internal:1234/v1
+      LLM_MODEL: openai/gpt-oss-20b
+    volumes:
+      - ./logs:/app/logs
+      - model_registry:/app/model_registry
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bsf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bsf-frontend
+    environment:
+      REACT_APP_API_BASE_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - bsf-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  model_registry:
+    driver: local
+
+networks:
+  bsf-network:
+    driver: bridge

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- BSF-LoopTech 自動バックアップ（daily 3:00 AM JST） -->
+
+    <key>Label</key>
+    <string>com.bsf-looptech.backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/tonton/Desktop/workspace/bsf-looptech/scripts/backup_databases.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/tonton/Desktop/workspace/bsf-looptech</string>
+
+    <!-- 毎日 3:00 AM に実行 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- ログ設定 -->
+    <key>StandardOutPath</key>
+    <string>/Users/tonton/Desktop/workspace/bsf-looptech/logs/backup_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/tonton/Desktop/workspace/bsf-looptech/logs/backup_stderr.log</string>
+
+    <!-- 環境変数 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>BSF_BACKUP_DIR</key>
+        <string>/Users/tonton/BSF_Backups</string>
+    </dict>
+
+    <key>UserName</key>
+    <string>tonton</string>
+
+    <key>GroupName</key>
+    <string>staff</string>
+
+    <!-- 実行に失敗しても再試行しない -->
+    <key>LaunchOnlyOnce</key>
+    <false/>
+</dict>
+</plist>

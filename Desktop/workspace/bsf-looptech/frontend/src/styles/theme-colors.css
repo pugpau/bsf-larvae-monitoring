@@ -1,0 +1,205 @@
+/* ERC リサイクルシステム Design System — Design Tokens */
+/* Based on MASTER.md: Industrial Analytics Dashboard */
+
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* ===== Core Palette (MASTER.md) ===== */
+  --color-primary: #1E40AF;
+  --color-secondary: #3B82F6;
+  --color-accent: #F59E0B;
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-text: #1E293B;
+  --color-text-secondary: #64748B;
+  --color-border: #E2E8F0;
+
+  /* ===== Primary Scale ===== */
+  --color-primary-50: #EFF6FF;
+  --color-primary-100: #DBEAFE;
+  --color-primary-200: #BFDBFE;
+  --color-primary-300: #93C5FD;
+  --color-primary-400: #60A5FA;
+  --color-primary-500: #3B82F6;
+  --color-primary-600: #2563EB;
+  --color-primary-700: #1D4ED8;
+  --color-primary-800: #1E40AF;
+  --color-primary-900: #1E3A8A;
+
+  /* ===== Semantic Colors ===== */
+  --color-success: #16A34A;
+  --color-success-light: #DCFCE7;
+  --color-success-main: #16A34A;
+  --color-success-dark: #15803D;
+  --color-success-contrast: #FFFFFF;
+
+  --color-warning: #D97706;
+  --color-warning-light: #FEF3C7;
+  --color-warning-main: #D97706;
+  --color-warning-dark: #B45309;
+  --color-warning-contrast: #000000;
+
+  --color-danger: #DC2626;
+  --color-error-light: #FEE2E2;
+  --color-error-main: #DC2626;
+  --color-error-dark: #B91C1C;
+  --color-error-contrast: #FFFFFF;
+
+  --color-info: #0284C7;
+  --color-info-light: #E0F2FE;
+  --color-info-main: #0284C7;
+  --color-info-dark: #0369A1;
+  --color-info-contrast: #FFFFFF;
+
+  /* ===== Chart Colors (8-color palette) ===== */
+  --chart-color-1: #1E40AF;
+  --chart-color-2: #F59E0B;
+  --chart-color-3: #16A34A;
+  --chart-color-4: #DC2626;
+  --chart-color-5: #7C3AED;
+  --chart-color-6: #0891B2;
+  --chart-color-7: #DB2777;
+  --chart-color-8: #65A30D;
+
+  /* ===== Neutral Colors ===== */
+  --color-neutral-0: #FFFFFF;
+  --color-neutral-50: #F8FAFC;
+  --color-neutral-100: #F1F5F9;
+  --color-neutral-200: #E2E8F0;
+  --color-neutral-300: #CBD5E1;
+  --color-neutral-400: #94A3B8;
+  --color-neutral-500: #64748B;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1E293B;
+  --color-neutral-900: #0F172A;
+
+  /* ===== Background & Surface ===== */
+  --color-background-default: #F8FAFC;
+  --color-background-paper: #FFFFFF;
+  --color-background-elevated: #FFFFFF;
+  --color-background-overlay: rgba(0, 0, 0, 0.5);
+
+  /* ===== Text ===== */
+  --color-text-primary: #1E293B;
+  --color-text-disabled: #94A3B8;
+  --color-text-hint: #CBD5E1;
+  --color-text-on-primary: #FFFFFF;
+  --color-text-on-secondary: #FFFFFF;
+
+  /* ===== Border ===== */
+  --color-border-light: #E2E8F0;
+  --color-border-main: #CBD5E1;
+  --color-border-dark: #94A3B8;
+
+  /* ===== Shadows (MASTER.md) ===== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* ===== Spacing (MASTER.md) ===== */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* ===== Border Radius (MASTER.md) ===== */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* ===== Transitions ===== */
+  --transition-fast: 150ms;
+  --transition-normal: 200ms;
+  --transition-slow: 300ms;
+
+  /* ===== Typography ===== */
+  --font-heading: 'Fira Sans', sans-serif;
+  --font-body: 'Fira Sans', sans-serif;
+  --font-data: 'Fira Code', monospace;
+}
+
+/* ===== Utility Classes ===== */
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-disabled { color: var(--color-text-disabled); }
+
+.bg-default { background-color: var(--color-background-default); }
+.bg-paper { background-color: var(--color-background-paper); }
+
+.bg-primary { background-color: var(--color-primary); }
+.bg-secondary { background-color: var(--color-secondary); }
+.bg-accent { background-color: var(--color-accent); }
+
+.bg-success { background-color: var(--color-success); }
+.bg-warning { background-color: var(--color-warning); }
+.bg-error { background-color: var(--color-error-main); }
+.bg-info { background-color: var(--color-info); }
+
+/* ===== Focus States ===== */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ===== Selection ===== */
+::selection {
+  background-color: var(--color-primary-200);
+  color: var(--color-text-primary);
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-neutral-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-400);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-500);
+}
+
+/* ===== Data Display Helpers ===== */
+.font-data {
+  font-family: var(--font-data);
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.data-value-lg {
+  font-family: var(--font-data);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text);
+}
+
+.data-value-md {
+  font-family: var(--font-data);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.data-value-sm {
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+/* ===== Status Indicators ===== */
+.status-pass { color: var(--color-success); font-weight: 600; }
+.status-warn { color: var(--color-warning); font-weight: 600; }
+.status-fail { color: var(--color-danger); font-weight: 600; }

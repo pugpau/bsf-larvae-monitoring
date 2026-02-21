@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_bsf_system
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/unit/ \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=test-results-unit.xml \
+            -q
+        env:
+          PYTHONPATH: .
+
+      - name: Run integration tests
+        run: |
+          python -m pytest tests/integration/ \
+            -p no:cacheprovider \
+            --junitxml=test-results-integration.xml \
+            -q
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_bsf_system
+          SECRET_KEY: test-secret-key-for-ci
+          SKIP_AUTH: "true"
+
+      - name: Alembic migration dry-run
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_bsf_system
+          SECRET_KEY: test-secret-key-for-ci
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-backend
+          path: test-results-*.xml
+
+  frontend-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          CI: "true"
+          GENERATE_SOURCEMAP: "false"
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm test -- --watchAll=false --passWithNoTests
+        env:
+          CI: "true"
+
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security tools
+        run: pip install bandit
+
+      - name: Bandit static analysis
+        run: bandit -r src/ -f json -o bandit-report.json -ll || true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: bandit-report.json
+
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f Dockerfile.backend -t bsf-backend:test .
+
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile -t bsf-frontend:test frontend/
+
+      - name: Validate docker-compose
+        run: SECRET_KEY=ci-test docker compose config > /dev/null
